@@ -12,6 +12,8 @@ from labelrag.generation.generator import AnswerGenerator, GeneratedAnswer
 from labelrag.generation.prompt_builder import build_prompt_context
 from labelrag.indexing.corpus_index import CorpusIndex, build_corpus_index
 from labelrag.io.serialize import (
+    backup_other_persistence_format,
+    cleanup_persistence_backups,
     corpus_index_from_dict,
     corpus_index_to_dict,
     dump_json,
@@ -23,6 +25,7 @@ from labelrag.io.serialize import (
     pipeline_config_to_dict,
     remove_other_persistence_format,
     resolve_persistence_format,
+    restore_persistence_backups,
     save_with_optional_gzip,
 )
 from labelrag.retrieval.selector import (
@@ -207,23 +210,36 @@ class RAGPipeline:
         destination = Path(path)
         destination.mkdir(parents=True, exist_ok=True)
         persistence_format = resolve_persistence_format(destination, format)
+        artifact_paths = [
+            persistence_path(destination, stem, persistence_format)
+            for stem in ("config", "label_generator", "fit_result", "corpus_index")
+        ]
+        backups = backup_other_persistence_format(destination, persistence_format)
+        try:
+            dump_json(
+                pipeline_config_to_dict(self.config),
+                artifact_paths[0],
+            )
+            save_with_optional_gzip(
+                artifact_paths[1],
+                self._label_generator.save,
+            )
+            save_with_optional_gzip(
+                artifact_paths[2],
+                lambda artifact_path: dump_result(fit_result, artifact_path),
+            )
+            dump_json(
+                corpus_index_to_dict(self._corpus_index),
+                artifact_paths[3],
+            )
+        except Exception:
+            for artifact_path in artifact_paths:
+                artifact_path.unlink(missing_ok=True)
+            restore_persistence_backups(backups)
+            raise
+
+        cleanup_persistence_backups(backups)
         remove_other_persistence_format(destination, persistence_format)
-        dump_json(
-            pipeline_config_to_dict(self.config),
-            persistence_path(destination, "config", persistence_format),
-        )
-        save_with_optional_gzip(
-            persistence_path(destination, "label_generator", persistence_format),
-            self._label_generator.save,
-        )
-        save_with_optional_gzip(
-            persistence_path(destination, "fit_result", persistence_format),
-            lambda artifact_path: dump_result(fit_result, artifact_path),
-        )
-        dump_json(
-            corpus_index_to_dict(self._corpus_index),
-            persistence_path(destination, "corpus_index", persistence_format),
-        )
 
     @classmethod
     def load(

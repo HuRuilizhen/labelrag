@@ -7,6 +7,7 @@ import pytest
 
 from labelrag import RAGPipeline, RAGPipelineConfig
 from labelrag.generation.generator import GeneratedAnswer
+from labelrag.pipeline import rag_pipeline as rag_pipeline_module
 
 
 @dataclass
@@ -178,6 +179,46 @@ def test_load_rejects_incorrect_explicit_persistence_format(tmp_path: Path) -> N
 
     with pytest.raises(RuntimeError, match="Missing persistence artifacts for format `json`"):
         RAGPipeline.load(output_dir, format="json")
+
+
+def test_failed_format_migration_restores_previous_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed save should restore the previous persistence snapshot."""
+
+    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+        ]
+    )
+
+    output_dir = tmp_path / "pipeline"
+    pipeline.save(output_dir, format="json.gz")
+
+    original_dump_result = rag_pipeline_module.dump_result
+
+    def fail_dump_result(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("simulated failure")
+
+    monkeypatch.setattr(rag_pipeline_module, "dump_result", fail_dump_result)
+
+    with pytest.raises(RuntimeError, match="simulated failure"):
+        pipeline.save(output_dir, format="json")
+
+    monkeypatch.setattr(rag_pipeline_module, "dump_result", original_dump_result)
+
+    assert (output_dir / "config.json.gz").is_file()
+    assert (output_dir / "label_generator.json.gz").is_file()
+    assert (output_dir / "fit_result.json.gz").is_file()
+    assert (output_dir / "corpus_index.json.gz").is_file()
+    assert not (output_dir / "config.json").exists()
+
+    loaded = RAGPipeline.load(output_dir, format="json.gz")
+    result = loaded.build_context("How do developers use language models?")
+    assert result.prompt_context
 
 
 def test_load_supports_answer_with_generator(tmp_path: Path) -> None:

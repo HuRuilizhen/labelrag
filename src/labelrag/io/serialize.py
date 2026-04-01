@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import shutil
 from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
@@ -73,7 +74,11 @@ def save_with_optional_gzip(
     with TemporaryDirectory() as tmp_dir:
         temporary_path = Path(tmp_dir) / destination.name.removesuffix(".gz")
         writer(temporary_path)
-        dump_text(temporary_path.read_text(encoding="utf-8"), destination)
+        with (
+            temporary_path.open("rb") as source_handle,
+            gzip.open(destination, "wb") as dest_handle,
+        ):
+            shutil.copyfileobj(source_handle, dest_handle)
 
 
 def load_with_optional_gzip(
@@ -88,7 +93,8 @@ def load_with_optional_gzip(
 
     with TemporaryDirectory() as tmp_dir:
         temporary_path = Path(tmp_dir) / source.name.removesuffix(".gz")
-        temporary_path.write_text(load_text(source), encoding="utf-8")
+        with gzip.open(source, "rb") as source_handle, temporary_path.open("wb") as dest_handle:
+            shutil.copyfileobj(source_handle, dest_handle)
         return loader(temporary_path)
 
 
@@ -143,6 +149,43 @@ def remove_other_persistence_format(root: str | Path, format: PersistenceFormat)
     other = "json.gz" if format == "json" else "json"
     for stem in _ARTIFACT_STEMS:
         persistence_path(root, stem, other).unlink(missing_ok=True)
+
+
+def backup_other_persistence_format(
+    root: str | Path,
+    format: PersistenceFormat,
+) -> list[tuple[Path, Path]]:
+    """Rename stale artifacts from the non-selected format to backup files."""
+
+    source = Path(root)
+    other = "json.gz" if format == "json" else "json"
+    backups: list[tuple[Path, Path]] = []
+    for stem in _ARTIFACT_STEMS:
+        original = persistence_path(source, stem, other)
+        if not original.exists():
+            continue
+        backup = original.with_name(f"{original.name}.bak")
+        backup.unlink(missing_ok=True)
+        original.rename(backup)
+        backups.append((original, backup))
+    return backups
+
+
+def restore_persistence_backups(backups: list[tuple[Path, Path]]) -> None:
+    """Restore backed up artifacts after a failed save attempt."""
+
+    for original, backup in backups:
+        if original.exists():
+            original.unlink()
+        if backup.exists():
+            backup.rename(original)
+
+
+def cleanup_persistence_backups(backups: list[tuple[Path, Path]]) -> None:
+    """Remove backup files after a successful save attempt."""
+
+    for _, backup in backups:
+        backup.unlink(missing_ok=True)
 
 
 def ensure_persistence_artifacts_exist(
