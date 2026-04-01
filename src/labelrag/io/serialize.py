@@ -145,6 +145,25 @@ def remove_other_persistence_format(root: str | Path, format: PersistenceFormat)
         persistence_path(root, stem, other).unlink(missing_ok=True)
 
 
+def ensure_persistence_artifacts_exist(
+    root: str | Path,
+    format: PersistenceFormat,
+) -> None:
+    """Validate that all required artifacts exist for the chosen format."""
+
+    source = Path(root)
+    missing_paths = [
+        str(path.name)
+        for stem in _ARTIFACT_STEMS
+        if not (path := persistence_path(source, stem, format)).is_file()
+    ]
+    if missing_paths:
+        missing = ", ".join(missing_paths)
+        raise RuntimeError(
+            f"Missing persistence artifacts for format `{format}`: {missing}."
+        )
+
+
 def _normalize_persistence_format(value: str) -> PersistenceFormat:
     """Validate a persistence format value."""
 

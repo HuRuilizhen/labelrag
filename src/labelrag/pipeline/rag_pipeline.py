@@ -15,6 +15,7 @@ from labelrag.io.serialize import (
     corpus_index_from_dict,
     corpus_index_to_dict,
     dump_json,
+    ensure_persistence_artifacts_exist,
     load_json,
     load_with_optional_gzip,
     persistence_path,
@@ -234,6 +235,7 @@ class RAGPipeline:
 
         source = Path(path)
         persistence_format = resolve_persistence_format(source, format)
+        ensure_persistence_artifacts_exist(source, persistence_format)
         config = pipeline_config_from_dict(
             load_json(persistence_path(source, "config", persistence_format))
         )
