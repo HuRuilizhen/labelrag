@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import gzip
 import json
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, cast
+from tempfile import TemporaryDirectory
+from typing import Any, Literal, TypeVar, cast
 
 from labelgen.io.serialize import config_from_dict, config_to_dict
 
@@ -13,22 +16,141 @@ from labelrag.config import PromptConfig, RAGPipelineConfig, RetrievalConfig
 from labelrag.indexing.corpus_index import CorpusIndex
 from labelrag.types import IndexedParagraph
 
+PersistenceFormat = Literal["json", "json.gz"]
+_ARTIFACT_STEMS = ("config", "label_generator", "fit_result", "corpus_index")
+_T = TypeVar("_T")
+
 
 def dump_json(data: dict[str, Any], path: str | Path) -> None:
     """Serialize a JSON object to disk."""
 
     destination = Path(path)
-    destination.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+    dump_text(json.dumps(data, indent=2, sort_keys=True), destination)
 
 
 def load_json(path: str | Path) -> dict[str, Any]:
     """Load a JSON object from disk."""
 
     source = Path(path)
-    data = json.loads(source.read_text(encoding="utf-8"))
+    data = json.loads(load_text(source))
     if not isinstance(data, dict):
         raise TypeError("Serialized object must be a JSON object.")
     return _as_string_key_dict(cast(object, data))
+
+
+def dump_text(data: str, path: str | Path) -> None:
+    """Serialize text to disk with optional gzip compression."""
+
+    destination = Path(path)
+    if destination.name.endswith(".gz"):
+        with gzip.open(destination, "wt", encoding="utf-8") as handle:
+            handle.write(data)
+        return
+    destination.write_text(data, encoding="utf-8")
+
+
+def load_text(path: str | Path) -> str:
+    """Load text from disk with optional gzip decompression."""
+
+    source = Path(path)
+    if source.name.endswith(".gz"):
+        with gzip.open(source, "rt", encoding="utf-8") as handle:
+            return handle.read()
+    return source.read_text(encoding="utf-8")
+
+
+def save_with_optional_gzip(
+    path: str | Path,
+    writer: Callable[[Path], None],
+) -> None:
+    """Write an artifact directly or through a temporary gzip wrapper."""
+
+    destination = Path(path)
+    if not destination.name.endswith(".gz"):
+        writer(destination)
+        return
+
+    with TemporaryDirectory() as tmp_dir:
+        temporary_path = Path(tmp_dir) / destination.name.removesuffix(".gz")
+        writer(temporary_path)
+        dump_text(temporary_path.read_text(encoding="utf-8"), destination)
+
+
+def load_with_optional_gzip(
+    path: str | Path,
+    loader: Callable[[Path], _T],
+) -> _T:
+    """Load an artifact directly or through a temporary gzip wrapper."""
+
+    source = Path(path)
+    if not source.name.endswith(".gz"):
+        return loader(source)
+
+    with TemporaryDirectory() as tmp_dir:
+        temporary_path = Path(tmp_dir) / source.name.removesuffix(".gz")
+        temporary_path.write_text(load_text(source), encoding="utf-8")
+        return loader(temporary_path)
+
+
+def persistence_path(root: str | Path, stem: str, format: PersistenceFormat) -> Path:
+    """Build a persistence artifact path for a known format."""
+
+    suffix = ".json.gz" if format == "json.gz" else ".json"
+    return Path(root) / f"{stem}{suffix}"
+
+
+def resolve_persistence_format(
+    root: str | Path,
+    format: PersistenceFormat | None = None,
+) -> PersistenceFormat:
+    """Resolve a persistence format from explicit input or on-disk artifacts."""
+
+    if format is not None:
+        return _normalize_persistence_format(format)
+
+    source = Path(root)
+    json_paths = [persistence_path(source, stem, "json") for stem in _ARTIFACT_STEMS]
+    gzip_paths = [persistence_path(source, stem, "json.gz") for stem in _ARTIFACT_STEMS]
+
+    json_exists = [path.exists() for path in json_paths]
+    gzip_exists = [path.exists() for path in gzip_paths]
+
+    if any(json_exists) and any(gzip_exists):
+        raise RuntimeError(
+            "Detected mixed persistence formats. Pass `format` explicitly or clean the "
+            "target directory."
+        )
+    if any(json_exists):
+        if not all(json_exists):
+            raise RuntimeError(
+                "Detected incomplete JSON persistence artifacts. Pass `format` explicitly "
+                "or clean the target directory."
+            )
+        return "json"
+    if any(gzip_exists):
+        if not all(gzip_exists):
+            raise RuntimeError(
+                "Detected incomplete JSON.GZ persistence artifacts. Pass `format` "
+                "explicitly or clean the target directory."
+            )
+        return "json.gz"
+    return "json"
+
+
+def remove_other_persistence_format(root: str | Path, format: PersistenceFormat) -> None:
+    """Remove stale persistence files from the non-selected format."""
+
+    other = "json.gz" if format == "json" else "json"
+    for stem in _ARTIFACT_STEMS:
+        persistence_path(root, stem, other).unlink(missing_ok=True)
+
+
+def _normalize_persistence_format(value: str) -> PersistenceFormat:
+    """Validate a persistence format value."""
+
+    if value not in {"json", "json.gz"}:
+        raise ValueError("Persistence format must be either `json` or `json.gz`.")
+    return cast(PersistenceFormat, value)
 
 
 def _as_string_key_dict(value: object) -> dict[str, Any]:
