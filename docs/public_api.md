@@ -75,6 +75,14 @@ Accepted inputs:
 - `list[str]`
 - `list[labelgen.Paragraph]`
 
+Current update boundary:
+
+- `fit(...)` is batch-only
+- the current package does not support incremental paragraph ingestion
+- adding new paragraphs currently requires a full refit
+- `save(...)` and `load(...)` restore a static fitted state rather than an
+  incrementally updateable corpus state
+
 #### `build_context`
 
 ```python
@@ -91,7 +99,14 @@ answer(question: str) -> RAGAnswerResult
 ```
 
 Runs query analysis, retrieval, prompt context construction, and optional answer
-generation.
+generation using the pipeline-level default generator configured at
+construction time.
+
+Behavior:
+
+- if a pipeline-level generator is configured, `answer(...)` uses it
+- if no generator is configured, `answer(...)` still returns retrieval outputs
+  and prompt context, but `answer_text` may be empty
 
 #### `answer_with_generator`
 
@@ -104,22 +119,51 @@ answer_with_generator(
 
 Runs the full answer flow with a per-call generator override.
 
+Behavior:
+
+- the passed generator overrides the pipeline-level default generator for this
+  call only
+- this is the explicit way to switch provider, model, or credentials without
+  rebuilding the pipeline
+
 #### `save`
 
 ```python
-save(path: str | Path) -> None
+save(
+    path: str | Path,
+    format: Literal["json", "json.gz"] | None = None,
+) -> None
 ```
 
 Persists pipeline configuration, fitted `LabelGenerator` state, and retrieval
 artifacts.
 
+Behavior:
+
+- when `format` is omitted, the implementation auto-detects an existing
+  persistence layout in the target directory
+- when `format` is explicit, it overrides auto-detection
+- the current release supports whole-snapshot persistence in either:
+  - `json`
+  - `json.gz`
+- mixed compressed and uncompressed artifact layouts are out of scope
+
 #### `load`
 
 ```python
-RAGPipeline.load(path: str | Path) -> RAGPipeline
+RAGPipeline.load(
+    path: str | Path,
+    format: Literal["json", "json.gz"] | None = None,
+) -> RAGPipeline
 ```
 
 Loads a previously saved pipeline.
+
+Behavior:
+
+- when `format` is omitted, the loader auto-detects `json` versus `json.gz`
+- when `format` is explicit, the loader does not guess and requires the chosen
+  format to exist completely
 
 ### Error Conditions
 
@@ -326,6 +370,60 @@ Recommended additional metadata keys:
 - `retrieval_limit`
 - `generation_metadata`
 
+## Built-In Provider Adapter
+
+The package also exports a minimal built-in OpenAI-compatible answer generator.
+
+### `OpenAICompatibleConfig`
+
+```python
+@dataclass(slots=True)
+class OpenAICompatibleConfig:
+    model: str
+    api_key: str | None = None
+    api_key_env_var: str = "OPENAI_API_KEY"
+    base_url: str = "https://api.openai.com/v1"
+    organization: str | None = None
+    timeout_seconds: float = 30.0
+    temperature: float = 0.0
+    max_tokens: int | None = None
+    system_prompt: str = "Answer the question using the provided context."
+```
+
+Field semantics:
+
+- `model` is a required explicit provider/model identifier
+- `base_url` is an explicit endpoint parameter and may be either:
+  - a provider base URL such as `https://api.openai.com/v1`
+  - or a full `/chat/completions` endpoint URL
+- `api_key` may be passed explicitly
+- `api_key_env_var` is only a fallback when `api_key` is not provided
+- `organization`, `timeout_seconds`, `temperature`, `max_tokens`, and
+  `system_prompt` are optional request-shaping parameters
+
+Environment-variable note:
+
+- example-level variables such as `LABELRAG_LLM_MODEL` are convenience settings
+  used by runnable example scripts
+- they are not part of the core library API contract
+
+### `OpenAICompatibleAnswerGenerator`
+
+```python
+class OpenAICompatibleAnswerGenerator:
+    def __init__(self, config: OpenAICompatibleConfig) -> None: ...
+    def generate(self, question: str, context: str) -> GeneratedAnswer: ...
+```
+
+Behavior:
+
+- the adapter targets a minimal non-streaming OpenAI-compatible
+  chat-completions API surface
+- provider configuration can be supplied entirely through explicit arguments
+- environment variables are optional and mainly useful for API-key lookup
+- generation metadata should expose the resolved model name and any available
+  token-usage metadata
+
 ## Generator Protocol
 
 `labelrag` should define an answer-generation abstraction rather than bind
@@ -403,6 +501,19 @@ Public guarantee:
 
 - a saved and reloaded pipeline should preserve retrieval behavior for the same
   fitted state, question, and config
+
+Current persistence formats:
+
+- `json`
+- `json.gz`
+
+Format behavior:
+
+- when `format` is omitted, the implementation auto-detects an existing format
+  layout
+- when `format` is explicit, it overrides auto-detection
+- the current release supports whole-snapshot compression or no compression,
+  but not mixed layouts
 
 ## Convenience Re-Exports
 
