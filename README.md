@@ -108,7 +108,8 @@ It supports:
 
 - standard base URLs such as `https://api.openai.com/v1`
 - full endpoint URLs such as `https://api.mistral.ai/v1/chat/completions`
-- API key injection through config or environment variables
+- API key injection through explicit config or optional environment-variable
+  lookup
 - non-streaming text generation for `answer_with_generator(...)`
 
 This adapter is intended to cover providers such as OpenAI, Mistral, and Qwen
@@ -146,10 +147,25 @@ Runnable examples are available in [`examples/`](examples/):
 - `corpus_index.json`
 - `fit_result.json`
 
+The persistence layer now supports:
+
+- `json`
+- `json.gz`
+
+Compression is applied to the full saved snapshot rather than mixing compressed
+and uncompressed artifacts in one directory.
+
 Public guarantee:
 
 - a saved and reloaded pipeline should preserve retrieval behavior for the same
   fitted state, question, and config
+
+Current update boundary:
+
+- `fit(...)` is batch-only
+- adding new paragraphs currently requires a full refit
+- save/load restores a static fitted state rather than an incrementally
+  updateable corpus state
 
 ## Configuration Notes
 
