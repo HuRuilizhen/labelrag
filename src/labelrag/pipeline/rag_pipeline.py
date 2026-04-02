@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as package_version
 from pathlib import Path
 from typing import Literal
 
@@ -18,8 +20,10 @@ from labelrag.io.serialize import (
     corpus_index_to_dict,
     dump_json,
     ensure_persistence_artifacts_exist,
+    has_manifest,
     load_json,
     load_with_optional_gzip,
+    manifest_to_dict,
     persistence_path,
     pipeline_config_from_dict,
     pipeline_config_to_dict,
@@ -27,12 +31,14 @@ from labelrag.io.serialize import (
     resolve_persistence_format,
     restore_persistence_backups,
     save_with_optional_gzip,
+    validate_manifest,
 )
 from labelrag.retrieval.selector import (
     select_concept_overlap_fallback,
     select_greedy_paragraphs,
 )
 from labelrag.types import (
+    IndexedParagraph,
     QueryAnalysis,
     RAGAnswerResult,
     RetrievalResult,
@@ -73,6 +79,52 @@ class RAGPipeline:
         self._fit_result = result
         self._corpus_index = build_corpus_index(result)
         return self
+
+    def get_paragraph(self, paragraph_id: str) -> IndexedParagraph | None:
+        """Return one indexed paragraph by ID when it exists."""
+
+        self._require_fitted()
+        assert self._corpus_index is not None
+        return self._corpus_index.paragraphs_by_id.get(paragraph_id)
+
+    def get_label_paragraph_ids(self, label_id: str) -> list[str]:
+        """Return paragraph IDs associated with one label."""
+
+        self._require_fitted()
+        assert self._corpus_index is not None
+        return list(self._corpus_index.paragraph_ids_by_label.get(label_id, []))
+
+    def get_label_paragraphs(self, label_id: str) -> list[IndexedParagraph]:
+        """Return paragraph records associated with one label."""
+
+        self._require_fitted()
+        assert self._corpus_index is not None
+        return [
+            self._corpus_index.paragraphs_by_id[paragraph_id]
+            for paragraph_id in self.get_label_paragraph_ids(label_id)
+            if paragraph_id in self._corpus_index.paragraphs_by_id
+        ]
+
+    def get_paragraph_label_ids(self, paragraph_id: str) -> list[str]:
+        """Return label IDs associated with one paragraph."""
+
+        self._require_fitted()
+        assert self._corpus_index is not None
+        return list(self._corpus_index.label_ids_by_paragraph.get(paragraph_id, []))
+
+    def get_paragraph_concept_ids(self, paragraph_id: str) -> list[str]:
+        """Return concept IDs associated with one paragraph."""
+
+        self._require_fitted()
+        assert self._corpus_index is not None
+        return list(self._corpus_index.concept_ids_by_paragraph.get(paragraph_id, []))
+
+    def get_concept_paragraph_ids(self, concept_id: str) -> list[str]:
+        """Return paragraph IDs associated with one concept."""
+
+        self._require_fitted()
+        assert self._corpus_index is not None
+        return list(self._corpus_index.paragraph_ids_by_concept.get(concept_id, []))
 
     def analyze_query(self, question: str) -> QueryAnalysis:
         """Analyze a query against the fitted label space."""
@@ -212,7 +264,7 @@ class RAGPipeline:
         persistence_format = resolve_persistence_format(destination, format)
         artifact_paths = [
             persistence_path(destination, stem, persistence_format)
-            for stem in ("config", "label_generator", "fit_result", "corpus_index")
+            for stem in ("config", "label_generator", "fit_result", "corpus_index", "manifest")
         ]
         backups = backup_other_persistence_format(destination, persistence_format)
         try:
@@ -231,6 +283,14 @@ class RAGPipeline:
             dump_json(
                 corpus_index_to_dict(self._corpus_index),
                 artifact_paths[3],
+            )
+            dump_json(
+                manifest_to_dict(
+                    labelrag_version=_package_version(),
+                    persistence_format=persistence_format,
+                    artifacts=[artifact_path.name for artifact_path in artifact_paths],
+                ),
+                artifact_paths[4],
             )
         except Exception:
             for artifact_path in artifact_paths:
@@ -251,7 +311,17 @@ class RAGPipeline:
 
         source = Path(path)
         persistence_format = resolve_persistence_format(source, format)
-        ensure_persistence_artifacts_exist(source, persistence_format)
+        include_manifest = has_manifest(source, persistence_format)
+        ensure_persistence_artifacts_exist(
+            source,
+            persistence_format,
+            include_manifest=include_manifest,
+        )
+        if include_manifest:
+            validate_manifest(
+                load_json(persistence_path(source, "manifest", persistence_format)),
+                format=persistence_format,
+            )
         config = pipeline_config_from_dict(
             load_json(persistence_path(source, "config", persistence_format))
         )
@@ -331,3 +401,12 @@ def _generation_model(answer: GeneratedAnswer) -> str:
     if not isinstance(model, str):
         return ""
     return model
+
+
+def _package_version() -> str:
+    """Return the installed package version when available."""
+
+    try:
+        return package_version("labelrag")
+    except PackageNotFoundError:
+        return ""
