@@ -7,7 +7,7 @@ from labelrag import RAGPipeline, RAGPipelineConfig
 
 
 def main() -> None:
-    """Fit, save, load, and reuse a pipeline."""
+    """Fit, save, load, and reuse a pipeline with compressed persistence."""
 
     config = RAGPipelineConfig()
     config.labelgen.extractor_mode = "heuristic"
@@ -22,7 +22,7 @@ def main() -> None:
     )
 
     output_path = Path("rag-pipeline-example")
-    pipeline.save(output_path)
+    pipeline.save(output_path, format="json.gz")
 
     loaded = RAGPipeline.load(output_path)
     retrieval = loaded.build_context("How does OpenAI use language models?")
