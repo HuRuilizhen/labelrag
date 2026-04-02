@@ -109,6 +109,7 @@ def test_fit_builds_label_and_concept_lookup_tables() -> None:
     assert paragraph_record.concept_ids
     assert paragraph_record.concept_texts
     assert pipeline.corpus_index.concept_ids_by_paragraph[paragraph_record.paragraph_id]
+    assert pipeline.corpus_index.concept_texts_by_id
 
     if paragraph_record.label_ids:
         first_label_id = paragraph_record.label_ids[0]
@@ -117,3 +118,9 @@ def test_fit_builds_label_and_concept_lookup_tables() -> None:
             paragraph_record.paragraph_id
             in pipeline.corpus_index.paragraph_ids_by_label[first_label_id]
         )
+
+    first_concept_id = paragraph_record.concept_ids[0]
+    assert (
+        paragraph_record.paragraph_id
+        in pipeline.corpus_index.paragraph_ids_by_concept[first_concept_id]
+    )

@@ -18,7 +18,9 @@ class CorpusIndex:
     paragraph_ids_by_label: dict[str, list[str]] = field(default_factory=lambda: {})
     label_ids_by_paragraph: dict[str, list[str]] = field(default_factory=lambda: {})
     concept_ids_by_paragraph: dict[str, list[str]] = field(default_factory=lambda: {})
+    paragraph_ids_by_concept: dict[str, list[str]] = field(default_factory=lambda: {})
     label_display_names_by_id: dict[str, str] = field(default_factory=lambda: {})
+    concept_texts_by_id: dict[str, str] = field(default_factory=lambda: {})
 
 
 def build_corpus_index(result: LabelGenerationResult) -> CorpusIndex:
@@ -43,11 +45,16 @@ def build_corpus_index(result: LabelGenerationResult) -> CorpusIndex:
         for label_id in label_ids:
             paragraph_ids_by_label_sets[label_id].add(paragraph_id)
 
+    paragraph_ids_by_concept_sets: dict[str, set[str]] = defaultdict(set)
+    for paragraph_id, concept_ids in concept_ids_by_paragraph_sets.items():
+        for concept_id in concept_ids:
+            paragraph_ids_by_concept_sets[concept_id].add(paragraph_id)
+
     paragraphs_by_id: dict[str, IndexedParagraph] = {}
     concept_ids_by_paragraph: dict[str, list[str]] = {}
     for paragraph in result.paragraphs:
         concept_ids = sorted(concept_ids_by_paragraph_sets.get(paragraph.id, set()))
-        label_ids = list(label_ids_by_paragraph.get(paragraph.id, []))
+        label_ids = sorted(label_ids_by_paragraph.get(paragraph.id, []))
         concept_ids_by_paragraph[paragraph.id] = concept_ids
         paragraphs_by_id[paragraph.id] = IndexedParagraph(
             paragraph_id=paragraph.id,
@@ -75,5 +82,10 @@ def build_corpus_index(result: LabelGenerationResult) -> CorpusIndex:
         },
         label_ids_by_paragraph=label_ids_by_paragraph,
         concept_ids_by_paragraph=concept_ids_by_paragraph,
+        paragraph_ids_by_concept={
+            concept_id: sorted(paragraph_ids)
+            for concept_id, paragraph_ids in paragraph_ids_by_concept_sets.items()
+        },
         label_display_names_by_id=label_display_names_by_id,
+        concept_texts_by_id=concept_text_by_id,
     )
