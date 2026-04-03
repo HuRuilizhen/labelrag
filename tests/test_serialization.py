@@ -259,6 +259,42 @@ def test_load_supports_legacy_snapshot_without_manifest(tmp_path: Path) -> None:
     assert loaded.fit_result == pipeline.fit_result
 
 
+def test_load_rebuilds_legacy_concept_reverse_lookups(tmp_path: Path) -> None:
+    """Legacy snapshots should rebuild derived concept inspection state on load."""
+
+    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+            "Production systems need monitoring and evaluation tooling.",
+        ]
+    )
+    assert pipeline.corpus_index is not None
+
+    output_dir = tmp_path / "pipeline"
+    pipeline.save(output_dir)
+
+    corpus_index_path = output_dir / "corpus_index.json"
+    corpus_index_data = json.loads(corpus_index_path.read_text(encoding="utf-8"))
+    corpus_index_data.pop("paragraph_ids_by_concept", None)
+    corpus_index_data.pop("concept_texts_by_id", None)
+    corpus_index_path.write_text(json.dumps(corpus_index_data, indent=2), encoding="utf-8")
+    (output_dir / "manifest.json").unlink()
+
+    loaded = RAGPipeline.load(output_dir)
+    paragraph_id = sorted(pipeline.corpus_index.paragraphs_by_id)[0]
+    paragraph = pipeline.get_paragraph(paragraph_id)
+    assert paragraph is not None
+
+    concept_id = paragraph.concept_ids[0]
+    assert loaded.get_concept_paragraph_ids(concept_id) == pipeline.get_concept_paragraph_ids(
+        concept_id
+    )
+    assert loaded.corpus_index is not None
+    assert loaded.corpus_index.concept_texts_by_id[concept_id] in paragraph.concept_texts
+
+
 def test_load_supports_answer_with_generator(tmp_path: Path) -> None:
     """A loaded pipeline should still support end-to-end answer generation."""
 

@@ -328,11 +328,37 @@ def corpus_index_from_dict(data: dict[str, Any]) -> CorpusIndex:
     """Reconstruct a corpus index from serialized data."""
 
     paragraphs_by_id_data = _as_string_key_dict(data.get("paragraphs_by_id"))
+    paragraphs_by_id = {
+        paragraph_id: IndexedParagraph(**_as_string_key_dict(paragraph_data))
+        for paragraph_id, paragraph_data in paragraphs_by_id_data.items()
+    }
+    concept_ids_by_paragraph = {
+        paragraph_id: _as_string_list(value)
+        for paragraph_id, value in _as_string_key_dict(
+            data.get("concept_ids_by_paragraph")
+        ).items()
+    }
+    paragraph_ids_by_concept_data = _as_string_key_dict(
+        data.get("paragraph_ids_by_concept", {})
+    )
+    concept_texts_by_id_data = _as_string_key_dict(data.get("concept_texts_by_id", {}))
+
+    paragraph_ids_by_concept = {
+        concept_id: _as_string_list(value)
+        for concept_id, value in paragraph_ids_by_concept_data.items()
+    }
+    if not paragraph_ids_by_concept:
+        paragraph_ids_by_concept = _rebuild_paragraph_ids_by_concept(concept_ids_by_paragraph)
+
+    concept_texts_by_id = {
+        concept_id: _as_string(value)
+        for concept_id, value in concept_texts_by_id_data.items()
+    }
+    if not concept_texts_by_id:
+        concept_texts_by_id = _rebuild_concept_texts_by_id(paragraphs_by_id)
+
     return CorpusIndex(
-        paragraphs_by_id={
-            paragraph_id: IndexedParagraph(**_as_string_key_dict(paragraph_data))
-            for paragraph_id, paragraph_data in paragraphs_by_id_data.items()
-        },
+        paragraphs_by_id=paragraphs_by_id,
         paragraph_ids_by_label={
             label_id: _as_string_list(value)
             for label_id, value in _as_string_key_dict(data.get("paragraph_ids_by_label")).items()
@@ -343,31 +369,47 @@ def corpus_index_from_dict(data: dict[str, Any]) -> CorpusIndex:
                 data.get("label_ids_by_paragraph")
             ).items()
         },
-        concept_ids_by_paragraph={
-            paragraph_id: _as_string_list(value)
-            for paragraph_id, value in _as_string_key_dict(
-                data.get("concept_ids_by_paragraph")
-            ).items()
-        },
-        paragraph_ids_by_concept={
-            concept_id: _as_string_list(value)
-            for concept_id, value in _as_string_key_dict(
-                data.get("paragraph_ids_by_concept", {})
-            ).items()
-        },
+        concept_ids_by_paragraph=concept_ids_by_paragraph,
+        paragraph_ids_by_concept=paragraph_ids_by_concept,
         label_display_names_by_id={
             label_id: _as_string(value)
             for label_id, value in _as_string_key_dict(
                 data.get("label_display_names_by_id")
             ).items()
         },
-        concept_texts_by_id={
-            concept_id: _as_string(value)
-            for concept_id, value in _as_string_key_dict(
-                data.get("concept_texts_by_id", {})
-            ).items()
-        },
+        concept_texts_by_id=concept_texts_by_id,
     )
+
+
+def _rebuild_paragraph_ids_by_concept(
+    concept_ids_by_paragraph: dict[str, list[str]],
+) -> dict[str, list[str]]:
+    """Rebuild concept reverse lookups from paragraph-side concept assignments."""
+
+    paragraph_ids_by_concept: dict[str, list[str]] = {}
+    for paragraph_id, concept_ids in concept_ids_by_paragraph.items():
+        for concept_id in concept_ids:
+            paragraph_ids_by_concept.setdefault(concept_id, []).append(paragraph_id)
+
+    for concept_id in paragraph_ids_by_concept:
+        paragraph_ids_by_concept[concept_id].sort()
+    return paragraph_ids_by_concept
+
+
+def _rebuild_concept_texts_by_id(
+    paragraphs_by_id: dict[str, IndexedParagraph],
+) -> dict[str, str]:
+    """Rebuild concept text mappings from indexed paragraph records."""
+
+    concept_texts_by_id: dict[str, str] = {}
+    for paragraph in paragraphs_by_id.values():
+        for concept_id, concept_text in zip(
+            paragraph.concept_ids,
+            paragraph.concept_texts,
+            strict=False,
+        ):
+            concept_texts_by_id.setdefault(concept_id, concept_text)
+    return concept_texts_by_id
 
 
 def _as_string_list(value: object) -> list[str]:
