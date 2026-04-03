@@ -127,6 +127,16 @@ The main public entrypoints are:
 - `OpenAICompatibleAnswerGenerator`, `OpenAICompatibleConfig`
 - convenience re-export: `Paragraph`
 
+`RAGPipeline` also exposes inspection helpers for paragraph/label/concept
+lookup workflows:
+
+- `get_paragraph(...)`
+- `get_label_paragraph_ids(...)`
+- `get_label_paragraphs(...)`
+- `get_paragraph_label_ids(...)`
+- `get_paragraph_concept_ids(...)`
+- `get_concept_paragraph_ids(...)`
+
 Detailed API notes are available in [`docs/public_api.md`](docs/public_api.md).
 
 ## Examples
@@ -135,6 +145,7 @@ Runnable examples are available in [`examples/`](examples/):
 
 - [`examples/basic_usage.py`](examples/basic_usage.py)
 - [`examples/custom_config.py`](examples/custom_config.py)
+- [`examples/inspection_api.py`](examples/inspection_api.py)
 - [`examples/save_and_load.py`](examples/save_and_load.py)
 - [`examples/provider_answer.py`](examples/provider_answer.py)
 
@@ -142,6 +153,7 @@ Runnable examples are available in [`examples/`](examples/):
 
 `save(path)` produces a human-inspectable directory containing:
 
+- `manifest.json`
 - `config.json`
 - `label_generator.json`
 - `corpus_index.json`
@@ -155,6 +167,9 @@ The persistence layer now supports:
 Compression is applied to the full saved snapshot rather than mixing compressed
 and uncompressed artifacts in one directory.
 
+Snapshots written by the current release include a lightweight manifest
+describing the saved version, persistence format, and expected artifacts.
+
 Public guarantee:
 
 - a saved and reloaded pipeline should preserve retrieval behavior for the same
@@ -166,6 +181,12 @@ Current update boundary:
 - adding new paragraphs currently requires a full refit
 - save/load restores a static fitted state rather than an incrementally
   updateable corpus state
+
+Legacy snapshot note:
+
+- loading pre-`0.0.2` snapshots remains a best-effort compatibility path
+- when older snapshots are missing derived concept inspection tables, `load()`
+  may rebuild them from paragraph-side concept data that is still present
 
 ## Configuration Notes
 
