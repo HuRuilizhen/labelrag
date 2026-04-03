@@ -18,6 +18,8 @@ Recommended import style:
 from labelrag import (
     GeneratedAnswer,
     IndexedParagraph,
+    OpenAICompatibleAnswerGenerator,
+    OpenAICompatibleConfig,
     PromptConfig,
     QueryAnalysis,
     RAGAnswerResult,
@@ -92,6 +94,24 @@ build_context(question: str) -> RetrievalResult
 Runs query-side analysis and retrieval only. Does not call the answer
 generator.
 
+#### Inspection lookup methods
+
+```python
+get_paragraph(paragraph_id: str) -> IndexedParagraph | None
+get_label_paragraph_ids(label_id: str) -> list[str]
+get_label_paragraphs(label_id: str) -> list[IndexedParagraph]
+get_paragraph_label_ids(paragraph_id: str) -> list[str]
+get_paragraph_concept_ids(paragraph_id: str) -> list[str]
+get_concept_paragraph_ids(concept_id: str) -> list[str]
+```
+
+Behavior:
+
+- all inspection methods require a fitted pipeline
+- `get_paragraph(...)` returns `None` for an unknown paragraph ID
+- list-returning inspection methods return `[]` for unknown IDs
+- returned list order is deterministic
+
 #### `answer`
 
 ```python
@@ -147,6 +167,10 @@ Behavior:
   - `json`
   - `json.gz`
 - mixed compressed and uncompressed artifact layouts are out of scope
+- snapshots written by the current release include a lightweight manifest
+  artifact:
+  - `manifest.json`
+  - `manifest.json.gz`
 
 #### `load`
 
@@ -164,6 +188,11 @@ Behavior:
 - when `format` is omitted, the loader auto-detects `json` versus `json.gz`
 - when `format` is explicit, the loader does not guess and requires the chosen
   format to exist completely
+- snapshots written by the current release are expected to include a manifest
+- loading pre-`0.0.2` snapshots without a manifest remains supported on a
+  best-effort basis
+- when legacy snapshots are missing derived concept inspection tables, the
+  loader may rebuild them from stored paragraph-side concept assignments
 
 ### Error Conditions
 
@@ -483,6 +512,7 @@ added, but paragraph text should remain the primary content.
 
 ```text
 pipeline_dir/
+  manifest.json
   config.json
   label_generator.json
   corpus_index.json
@@ -491,6 +521,10 @@ pipeline_dir/
 
 Persistence responsibilities:
 
+- `manifest.json` stores lightweight snapshot metadata:
+  - `labelrag_version`
+  - `persistence_format`
+  - `artifacts`
 - `label_generator.json` stores the fitted `labelgen.LabelGenerator`
 - `config.json` stores `RAGPipelineConfig`
 - `corpus_index.json` stores `labelrag` retrieval artifacts
@@ -514,6 +548,11 @@ Format behavior:
 - when `format` is explicit, it overrides auto-detection
 - the current release supports whole-snapshot compression or no compression,
   but not mixed layouts
+- snapshots written by `0.0.2` and later are expected to include a manifest
+- loading pre-`0.0.2` snapshots is a best-effort compatibility path rather than
+  a full historical migration guarantee
+- for legacy snapshots, missing derived concept inspection tables may be
+  rebuilt during load when the necessary paragraph-side concept data is present
 
 ## Convenience Re-Exports
 
