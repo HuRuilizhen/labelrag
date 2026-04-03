@@ -44,6 +44,18 @@ def test_lookup_methods_require_fit() -> None:
     with pytest.raises(RuntimeError, match="requires fit\\(\\)"):
         pipeline.get_concept_paragraph_ids("c1")
 
+    with pytest.raises(RuntimeError, match="requires fit\\(\\)"):
+        pipeline.get_label("l1")
+
+    with pytest.raises(RuntimeError, match="requires fit\\(\\)"):
+        pipeline.get_paragraph_labels("p0")
+
+    with pytest.raises(RuntimeError, match="requires fit\\(\\)"):
+        pipeline.get_paragraph_concepts("p0")
+
+    with pytest.raises(RuntimeError, match="requires fit\\(\\)"):
+        pipeline.get_concept_paragraphs("c1")
+
 
 def test_get_paragraph_returns_none_for_unknown_id() -> None:
     """Unknown paragraph IDs should return None."""
@@ -60,9 +72,13 @@ def test_lookup_methods_return_empty_lists_for_unknown_ids() -> None:
 
     assert pipeline.get_label_paragraph_ids("does-not-exist") == []
     assert pipeline.get_label_paragraphs("does-not-exist") == []
+    assert pipeline.get_label("does-not-exist") is None
     assert pipeline.get_paragraph_label_ids("does-not-exist") == []
+    assert pipeline.get_paragraph_labels("does-not-exist") == []
     assert pipeline.get_paragraph_concept_ids("does-not-exist") == []
+    assert pipeline.get_paragraph_concepts("does-not-exist") == []
     assert pipeline.get_concept_paragraph_ids("does-not-exist") == []
+    assert pipeline.get_concept_paragraphs("does-not-exist") == []
 
 
 def test_lookup_methods_return_stable_index_records() -> None:
@@ -84,15 +100,28 @@ def test_lookup_methods_return_stable_index_records() -> None:
         label_id = paragraph.label_ids[0]
         paragraph_ids = pipeline.get_label_paragraph_ids(label_id)
         paragraphs = pipeline.get_label_paragraphs(label_id)
+        label = pipeline.get_label(label_id)
+        paragraph_labels = pipeline.get_paragraph_labels(paragraph_id)
 
         assert paragraph_ids
         assert paragraph_id in paragraph_ids
         assert [item.paragraph_id for item in paragraphs] == paragraph_ids
+        assert label is not None
+        assert label.label_id == label_id
+        assert label.display_name == paragraph.label_display_names[0]
+        assert label.paragraph_ids == paragraph_ids
+        assert [item.label_id for item in paragraph_labels] == paragraph.label_ids
 
     if paragraph.concept_ids:
         concept_id = paragraph.concept_ids[0]
+        concept_paragraphs = pipeline.get_concept_paragraphs(concept_id)
+        paragraph_concepts = pipeline.get_paragraph_concepts(paragraph_id)
         assert paragraph_id in pipeline.get_concept_paragraph_ids(concept_id)
         assert concept_id in pipeline.corpus_index.concept_texts_by_id
+        assert [item.paragraph_id for item in concept_paragraphs] == (
+            pipeline.get_concept_paragraph_ids(concept_id)
+        )
+        assert [item.concept_id for item in paragraph_concepts] == paragraph.concept_ids
 
 
 def test_loaded_pipeline_preserves_inspection_behavior(tmp_path: Path) -> None:
@@ -107,6 +136,10 @@ def test_loaded_pipeline_preserves_inspection_behavior(tmp_path: Path) -> None:
 
     loaded = RAGPipeline.load(output_dir)
     assert loaded.get_paragraph(paragraph_id) == pipeline.get_paragraph(paragraph_id)
+    assert loaded.get_paragraph_labels(paragraph_id) == pipeline.get_paragraph_labels(paragraph_id)
+    assert loaded.get_paragraph_concepts(paragraph_id) == pipeline.get_paragraph_concepts(
+        paragraph_id
+    )
     assert loaded.get_paragraph_label_ids(paragraph_id) == pipeline.get_paragraph_label_ids(
         paragraph_id
     )
@@ -116,8 +149,14 @@ def test_loaded_pipeline_preserves_inspection_behavior(tmp_path: Path) -> None:
 
     paragraph = pipeline.get_paragraph(paragraph_id)
     assert paragraph is not None
+    if paragraph.label_ids:
+        label_id = paragraph.label_ids[0]
+        assert loaded.get_label(label_id) == pipeline.get_label(label_id)
     if paragraph.concept_ids:
         concept_id = paragraph.concept_ids[0]
         assert loaded.get_concept_paragraph_ids(concept_id) == pipeline.get_concept_paragraph_ids(
+            concept_id
+        )
+        assert loaded.get_concept_paragraphs(concept_id) == pipeline.get_concept_paragraphs(
             concept_id
         )

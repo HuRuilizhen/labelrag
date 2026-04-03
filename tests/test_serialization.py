@@ -71,6 +71,8 @@ def test_save_writes_expected_files(tmp_path: Path) -> None:
     assert (output_dir / "corpus_index.json").is_file()
 
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert isinstance(manifest["labelrag_version"], str)
+    assert manifest["labelrag_version"]
     assert manifest["persistence_format"] == "json"
     assert manifest["artifacts"] == [
         "config.json",
@@ -293,6 +295,29 @@ def test_load_rebuilds_legacy_concept_reverse_lookups(tmp_path: Path) -> None:
     )
     assert loaded.corpus_index is not None
     assert loaded.corpus_index.concept_texts_by_id[concept_id] in paragraph.concept_texts
+
+
+def test_load_rejects_manifest_without_labelrag_version(tmp_path: Path) -> None:
+    """Loading should fail when the manifest omits the required package version field."""
+
+    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+        ]
+    )
+
+    output_dir = tmp_path / "pipeline"
+    pipeline.save(output_dir)
+
+    manifest_path = output_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest.pop("labelrag_version", None)
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="labelrag_version"):
+        RAGPipeline.load(output_dir)
 
 
 def test_load_supports_answer_with_generator(tmp_path: Path) -> None:
