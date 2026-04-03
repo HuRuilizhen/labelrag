@@ -10,7 +10,9 @@ from labelrag.generation.openai_compatible import (
 )
 from labelrag.pipeline.rag_pipeline import RAGPipeline
 from labelrag.types import (
+    ConceptRecord,
     IndexedParagraph,
+    LabelRecord,
     QueryAnalysis,
     RAGAnswerResult,
     RetrievalResult,
@@ -19,8 +21,10 @@ from labelrag.types import (
 
 __all__ = [
     "AnswerGenerator",
+    "ConceptRecord",
     "GeneratedAnswer",
     "IndexedParagraph",
+    "LabelRecord",
     "OpenAICompatibleAnswerGenerator",
     "OpenAICompatibleConfig",
     "Paragraph",

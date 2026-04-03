@@ -18,6 +18,25 @@ class IndexedParagraph:
 
 
 @dataclass(slots=True)
+class LabelRecord:
+    """Label-side inspection record built from fitted retrieval state."""
+
+    label_id: str
+    display_name: str
+    concept_ids: list[str]
+    paragraph_ids: list[str]
+
+
+@dataclass(slots=True)
+class ConceptRecord:
+    """Concept-side inspection record built from fitted retrieval state."""
+
+    concept_id: str
+    text: str
+    paragraph_ids: list[str]
+
+
+@dataclass(slots=True)
 class QueryAnalysis:
     """Structured query-side analysis derived from a fitted label space."""
 
