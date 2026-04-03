@@ -20,6 +20,7 @@ class CorpusIndex:
     concept_ids_by_paragraph: dict[str, list[str]] = field(default_factory=lambda: {})
     paragraph_ids_by_concept: dict[str, list[str]] = field(default_factory=lambda: {})
     label_display_names_by_id: dict[str, str] = field(default_factory=lambda: {})
+    label_concept_ids_by_id: dict[str, list[str]] = field(default_factory=lambda: {})
     concept_texts_by_id: dict[str, str] = field(default_factory=lambda: {})
 
 
@@ -29,6 +30,9 @@ def build_corpus_index(result: LabelGenerationResult) -> CorpusIndex:
     concept_text_by_id = {concept.id: concept.normalized for concept in result.concepts}
     label_display_names_by_id = {
         community.id: community.display_name for community in result.communities
+    }
+    label_concept_ids_by_id = {
+        community.id: sorted(community.concept_ids) for community in result.communities
     }
 
     concept_ids_by_paragraph_sets: dict[str, set[str]] = defaultdict(set)
@@ -87,5 +91,6 @@ def build_corpus_index(result: LabelGenerationResult) -> CorpusIndex:
             for concept_id, paragraph_ids in paragraph_ids_by_concept_sets.items()
         },
         label_display_names_by_id=label_display_names_by_id,
+        label_concept_ids_by_id=label_concept_ids_by_id,
         concept_texts_by_id=concept_text_by_id,
     )

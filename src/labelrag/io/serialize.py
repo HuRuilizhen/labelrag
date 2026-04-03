@@ -239,6 +239,13 @@ def validate_manifest(
 ) -> None:
     """Validate the minimal shape of a persisted manifest."""
 
+    labelrag_version_value = data.get("labelrag_version")
+    if not isinstance(labelrag_version_value, str):
+        raise RuntimeError("Persistence manifest must include `labelrag_version`.")
+    labelrag_version = labelrag_version_value
+    if not labelrag_version:
+        raise RuntimeError("Persistence manifest must include a non-empty `labelrag_version`.")
+
     persisted_format = _as_string(data.get("persistence_format"))
     if persisted_format != format:
         raise RuntimeError(
@@ -320,6 +327,7 @@ def corpus_index_to_dict(index: CorpusIndex) -> dict[str, Any]:
         "concept_ids_by_paragraph": index.concept_ids_by_paragraph,
         "paragraph_ids_by_concept": index.paragraph_ids_by_concept,
         "label_display_names_by_id": index.label_display_names_by_id,
+        "label_concept_ids_by_id": index.label_concept_ids_by_id,
         "concept_texts_by_id": index.concept_texts_by_id,
     }
 
@@ -342,6 +350,7 @@ def corpus_index_from_dict(data: dict[str, Any]) -> CorpusIndex:
         data.get("paragraph_ids_by_concept", {})
     )
     concept_texts_by_id_data = _as_string_key_dict(data.get("concept_texts_by_id", {}))
+    label_concept_ids_by_id_data = _as_string_key_dict(data.get("label_concept_ids_by_id", {}))
 
     paragraph_ids_by_concept = {
         concept_id: _as_string_list(value)
@@ -356,6 +365,11 @@ def corpus_index_from_dict(data: dict[str, Any]) -> CorpusIndex:
     }
     if not concept_texts_by_id:
         concept_texts_by_id = _rebuild_concept_texts_by_id(paragraphs_by_id)
+
+    label_concept_ids_by_id = {
+        label_id: _as_string_list(value)
+        for label_id, value in label_concept_ids_by_id_data.items()
+    }
 
     return CorpusIndex(
         paragraphs_by_id=paragraphs_by_id,
@@ -377,6 +391,7 @@ def corpus_index_from_dict(data: dict[str, Any]) -> CorpusIndex:
                 data.get("label_display_names_by_id")
             ).items()
         },
+        label_concept_ids_by_id=label_concept_ids_by_id,
         concept_texts_by_id=concept_texts_by_id,
     )
 
