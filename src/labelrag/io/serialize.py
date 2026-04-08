@@ -11,6 +11,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Literal, TypeVar, cast
 
+from labelgen import LabelGenerationResult
 from labelgen.io.serialize import config_from_dict, config_to_dict
 
 from labelrag.config import PromptConfig, RAGPipelineConfig, RetrievalConfig
@@ -332,7 +333,10 @@ def corpus_index_to_dict(index: CorpusIndex) -> dict[str, Any]:
     }
 
 
-def corpus_index_from_dict(data: dict[str, Any]) -> CorpusIndex:
+def corpus_index_from_dict(
+    data: dict[str, Any],
+    fit_result: LabelGenerationResult | None = None,
+) -> CorpusIndex:
     """Reconstruct a corpus index from serialized data."""
 
     paragraphs_by_id_data = _as_string_key_dict(data.get("paragraphs_by_id"))
@@ -370,13 +374,20 @@ def corpus_index_from_dict(data: dict[str, Any]) -> CorpusIndex:
         label_id: _as_string_list(value)
         for label_id, value in label_concept_ids_by_id_data.items()
     }
+    paragraph_ids_by_label = {
+        label_id: _as_string_list(value)
+        for label_id, value in _as_string_key_dict(data.get("paragraph_ids_by_label")).items()
+    }
+    if not label_concept_ids_by_id:
+        label_concept_ids_by_id = _rebuild_label_concept_ids_by_id(
+            paragraph_ids_by_label,
+            concept_ids_by_paragraph,
+            fit_result,
+        )
 
     return CorpusIndex(
         paragraphs_by_id=paragraphs_by_id,
-        paragraph_ids_by_label={
-            label_id: _as_string_list(value)
-            for label_id, value in _as_string_key_dict(data.get("paragraph_ids_by_label")).items()
-        },
+        paragraph_ids_by_label=paragraph_ids_by_label,
         label_ids_by_paragraph={
             paragraph_id: _as_string_list(value)
             for paragraph_id, value in _as_string_key_dict(
@@ -425,6 +436,30 @@ def _rebuild_concept_texts_by_id(
         ):
             concept_texts_by_id.setdefault(concept_id, concept_text)
     return concept_texts_by_id
+
+
+def _rebuild_label_concept_ids_by_id(
+    paragraph_ids_by_label: dict[str, list[str]],
+    concept_ids_by_paragraph: dict[str, list[str]],
+    fit_result: LabelGenerationResult | None = None,
+) -> dict[str, list[str]]:
+    """Rebuild label-to-concept mappings from paragraph-side assignments."""
+
+    if fit_result is not None:
+        return {
+            community.id: sorted(community.concept_ids)
+            for community in fit_result.communities
+        }
+
+    label_concept_ids_by_id: dict[str, list[str]] = {}
+    for label_id, paragraph_ids in paragraph_ids_by_label.items():
+        concept_ids = {
+            concept_id
+            for paragraph_id in paragraph_ids
+            for concept_id in concept_ids_by_paragraph.get(paragraph_id, [])
+        }
+        label_concept_ids_by_id[label_id] = sorted(concept_ids)
+    return label_concept_ids_by_id
 
 
 def _as_string_list(value: object) -> list[str]:

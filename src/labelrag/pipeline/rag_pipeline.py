@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tomllib
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
 from pathlib import Path
@@ -382,7 +383,8 @@ class RAGPipeline:
             load_result,
         )
         pipeline._corpus_index = corpus_index_from_dict(
-            load_json(persistence_path(source, "corpus_index", persistence_format))
+            load_json(persistence_path(source, "corpus_index", persistence_format)),
+            pipeline._fit_result,
         )
         return pipeline
 
@@ -468,4 +470,11 @@ def _package_version() -> str:
     try:
         return package_version("labelrag")
     except PackageNotFoundError:
-        return ""
+        pyproject_path = Path(__file__).resolve().parents[3] / "pyproject.toml"
+        if pyproject_path.is_file():
+            with pyproject_path.open("rb") as handle:
+                project_table = tomllib.load(handle).get("project", {})
+            version = project_table.get("version")
+            if isinstance(version, str) and version:
+                return version
+        return "0.0.0"
