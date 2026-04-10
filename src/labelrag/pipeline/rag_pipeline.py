@@ -469,7 +469,7 @@ def _package_version() -> str:
 
     try:
         return package_version("labelrag")
-    except PackageNotFoundError:
+    except PackageNotFoundError as err:
         pyproject_path = Path(__file__).resolve().parents[3] / "pyproject.toml"
         if pyproject_path.is_file():
             with pyproject_path.open("rb") as handle:
@@ -477,4 +477,6 @@ def _package_version() -> str:
             version = project_table.get("version")
             if isinstance(version, str) and version:
                 return version
-        return "0.0.0"
+        raise RuntimeError(
+            "Unable to determine labelrag version for persistence manifest."
+        ) from err

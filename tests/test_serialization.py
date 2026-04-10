@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import dataclass
+from io import BufferedReader
 from pathlib import Path
 
 import pytest
@@ -344,6 +345,34 @@ def test_save_uses_pyproject_version_when_package_metadata_is_unavailable(
 
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["labelrag_version"] == "0.0.2"
+
+
+def test_save_fails_when_no_manifest_version_source_is_available(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Saving should fail clearly when no manifest version source can be resolved."""
+
+    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+        ]
+    )
+
+    def raise_package_not_found(_: str) -> str:
+        raise rag_pipeline_module.PackageNotFoundError
+
+    def load_project_without_version(_: BufferedReader) -> dict[str, dict[str, object]]:
+        return {"project": {}}
+
+    monkeypatch.setattr(rag_pipeline_module, "package_version", raise_package_not_found)
+    monkeypatch.setattr(rag_pipeline_module.tomllib, "load", load_project_without_version)
+
+    output_dir = tmp_path / "pipeline"
+    with pytest.raises(RuntimeError, match="Unable to determine labelrag version"):
+        pipeline.save(output_dir)
 
 
 def test_load_rebuilds_legacy_label_concept_ids(tmp_path: Path) -> None:
