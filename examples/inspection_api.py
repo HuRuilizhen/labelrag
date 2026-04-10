@@ -46,7 +46,11 @@ def main() -> None:
         concept_id = paragraph.concept_ids[0]
         print("\nParagraph concept records:")
         for concept in pipeline.get_paragraph_concepts(paragraph_id):
-            print(f"- {concept.concept_id}: text={concept.text} paragraph_ids={concept.paragraph_ids}")
+            print(
+                f"- {concept.concept_id}: "
+                f"text={concept.text} "
+                f"paragraph_ids={concept.paragraph_ids}"
+            )
         print("\nConcept paragraph records:")
         for concept_paragraph in pipeline.get_concept_paragraphs(concept_id):
             print(f"- {concept_paragraph.paragraph_id}: {concept_paragraph.text}")

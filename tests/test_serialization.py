@@ -344,7 +344,7 @@ def test_save_uses_pyproject_version_when_package_metadata_is_unavailable(
     pipeline.save(output_dir)
 
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["labelrag_version"] == "0.0.2"
+    assert manifest["labelrag_version"] == "0.0.3"
 
 
 def test_save_fails_when_no_manifest_version_source_is_available(
