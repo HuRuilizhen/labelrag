@@ -1,10 +1,10 @@
-"""Inspection API example for labelrag."""
+"""Record-oriented inspection API example for labelrag."""
 
 from labelrag import RAGPipeline, RAGPipelineConfig
 
 
 def main() -> None:
-    """Fit a small corpus and inspect paragraph/label/concept lookups."""
+    """Fit a small corpus and inspect paragraph, label, and concept records."""
 
     pipeline = RAGPipeline(RAGPipelineConfig())
     pipeline.fit(
@@ -27,15 +27,29 @@ def main() -> None:
 
     if paragraph.label_ids:
         label_id = paragraph.label_ids[0]
-        print("\nLabel lookup:")
-        print(f"- label_id={label_id}")
-        print(f"- paragraph_ids={pipeline.get_label_paragraph_ids(label_id)}")
+        label = pipeline.get_label(label_id)
+        assert label is not None
+        print("\nLabel record:")
+        print(f"- label_id={label.label_id}")
+        print(f"- display_name={label.display_name}")
+        print(f"- concept_ids={label.concept_ids}")
+        print(f"- paragraph_ids={label.paragraph_ids}")
+        print("\nParagraph label records:")
+        for paragraph_label in pipeline.get_paragraph_labels(paragraph_id):
+            print(
+                f"- {paragraph_label.label_id}: "
+                f"display_name={paragraph_label.display_name} "
+                f"paragraph_ids={paragraph_label.paragraph_ids}"
+            )
 
     if paragraph.concept_ids:
         concept_id = paragraph.concept_ids[0]
-        print("\nConcept lookup:")
-        print(f"- concept_id={concept_id}")
-        print(f"- paragraph_ids={pipeline.get_concept_paragraph_ids(concept_id)}")
+        print("\nParagraph concept records:")
+        for concept in pipeline.get_paragraph_concepts(paragraph_id):
+            print(f"- {concept.concept_id}: text={concept.text} paragraph_ids={concept.paragraph_ids}")
+        print("\nConcept paragraph records:")
+        for concept_paragraph in pipeline.get_concept_paragraphs(concept_id):
+            print(f"- {concept_paragraph.paragraph_id}: {concept_paragraph.text}")
 
 
 if __name__ == "__main__":
