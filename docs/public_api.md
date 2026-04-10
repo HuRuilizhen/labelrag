@@ -16,8 +16,10 @@ Recommended import style:
 
 ```python
 from labelrag import (
+    ConceptRecord,
     GeneratedAnswer,
     IndexedParagraph,
+    LabelRecord,
     OpenAICompatibleAnswerGenerator,
     OpenAICompatibleConfig,
     PromptConfig,
@@ -98,6 +100,10 @@ generator.
 
 ```python
 get_paragraph(paragraph_id: str) -> IndexedParagraph | None
+get_label(label_id: str) -> LabelRecord | None
+get_paragraph_labels(paragraph_id: str) -> list[LabelRecord]
+get_paragraph_concepts(paragraph_id: str) -> list[ConceptRecord]
+get_concept_paragraphs(concept_id: str) -> list[IndexedParagraph]
 get_label_paragraph_ids(label_id: str) -> list[str]
 get_label_paragraphs(label_id: str) -> list[IndexedParagraph]
 get_paragraph_label_ids(paragraph_id: str) -> list[str]
@@ -109,8 +115,24 @@ Behavior:
 
 - all inspection methods require a fitted pipeline
 - `get_paragraph(...)` returns `None` for an unknown paragraph ID
+- `get_label(...)` returns `None` for an unknown label ID
 - list-returning inspection methods return `[]` for unknown IDs
 - returned list order is deterministic
+
+Inspection API layering:
+
+- record-oriented inspection APIs are the primary inspection surface:
+  - `get_paragraph(...)`
+  - `get_label(...)`
+  - `get_paragraph_labels(...)`
+  - `get_paragraph_concepts(...)`
+  - `get_label_paragraphs(...)`
+  - `get_concept_paragraphs(...)`
+- ID-oriented helper APIs remain available as lower-level helpers:
+  - `get_label_paragraph_ids(...)`
+  - `get_paragraph_label_ids(...)`
+  - `get_paragraph_concept_ids(...)`
+  - `get_concept_paragraph_ids(...)`
 
 #### `answer`
 
@@ -278,6 +300,37 @@ Meaning:
 
 - normalized paragraph plus the label-side metadata needed for retrieval and
   trace inspection
+
+### `LabelRecord`
+
+```python
+@dataclass(slots=True)
+class LabelRecord:
+    label_id: str
+    display_name: str
+    concept_ids: list[str]
+    paragraph_ids: list[str]
+```
+
+Meaning:
+
+- lightweight label-side inspection record built from fitted retrieval state
+- intended for direct inspection workflows rather than retrieval scoring
+
+### `ConceptRecord`
+
+```python
+@dataclass(slots=True)
+class ConceptRecord:
+    concept_id: str
+    text: str
+    paragraph_ids: list[str]
+```
+
+Meaning:
+
+- lightweight concept-side inspection record built from fitted retrieval state
+- intended for direct inspection workflows rather than query analysis output
 
 ### `QueryAnalysis`
 
@@ -549,6 +602,9 @@ Format behavior:
 - the current release supports whole-snapshot compression or no compression,
   but not mixed layouts
 - snapshots written by `0.0.2` and later are expected to include a manifest
+- manifests must include a non-empty `labelrag_version`
+- `save(...)` fails explicitly if the current package version cannot be
+  determined for manifest writing
 - loading pre-`0.0.2` snapshots is a best-effort compatibility path rather than
   a full historical migration guarantee
 - for legacy snapshots, missing derived concept inspection tables may be
