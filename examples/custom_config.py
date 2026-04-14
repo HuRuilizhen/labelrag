@@ -1,6 +1,11 @@
 """Custom retrieval configuration example for labelrag."""
 
-from labelrag import RAGPipeline, RAGPipelineConfig
+from _demo_embedding import DemoEmbeddingProvider
+
+from labelrag import (
+    RAGPipeline,
+    RAGPipelineConfig,
+)
 
 
 def main() -> None:
@@ -19,7 +24,10 @@ def main() -> None:
         "Production systems rely on monitoring and deployment tooling.",
     ]
 
-    pipeline = RAGPipeline(config)
+    pipeline = RAGPipeline(
+        config,
+        embedding_provider=DemoEmbeddingProvider(),
+    )
     pipeline.fit(paragraphs)
 
     labeled = pipeline.build_context("Developers use language models in production systems.")

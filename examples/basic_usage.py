@@ -1,6 +1,11 @@
 """Basic end-to-end retrieval example for labelrag."""
 
-from labelrag import RAGPipeline, RAGPipelineConfig
+from _demo_embedding import DemoEmbeddingProvider
+
+from labelrag import (
+    RAGPipeline,
+    RAGPipelineConfig,
+)
 
 
 def main() -> None:
@@ -12,7 +17,14 @@ def main() -> None:
         "Production systems need monitoring and evaluation tooling.",
     ]
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    config = RAGPipelineConfig()
+    config.labelgen.extractor_mode = "heuristic"
+    config.labelgen.use_graph_community_detection = False
+
+    pipeline = RAGPipeline(
+        config,
+        embedding_provider=DemoEmbeddingProvider(),
+    )
     pipeline.fit(paragraphs)
 
     result = pipeline.build_context("How do developers use language models?")

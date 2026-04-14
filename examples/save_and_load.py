@@ -3,7 +3,12 @@
 import shutil
 from pathlib import Path
 
-from labelrag import RAGPipeline, RAGPipelineConfig
+from _demo_embedding import DemoEmbeddingProvider
+
+from labelrag import (
+    RAGPipeline,
+    RAGPipelineConfig,
+)
 
 
 def main() -> None:
@@ -13,7 +18,10 @@ def main() -> None:
     config.labelgen.extractor_mode = "heuristic"
     config.labelgen.use_graph_community_detection = False
 
-    pipeline = RAGPipeline(config)
+    pipeline = RAGPipeline(
+        config,
+        embedding_provider=DemoEmbeddingProvider(),
+    )
     pipeline.fit(
         [
             "OpenAI builds language models.",
@@ -24,7 +32,10 @@ def main() -> None:
     output_path = Path("rag-pipeline-example")
     pipeline.save(output_path, format="json.gz")
 
-    loaded = RAGPipeline.load(output_path)
+    loaded = RAGPipeline.load(
+        output_path,
+        embedding_provider=DemoEmbeddingProvider(),
+    )
     retrieval = loaded.build_context("How does OpenAI use language models?")
 
     print(f"Saved pipeline to: {output_path}")

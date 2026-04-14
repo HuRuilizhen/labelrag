@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import os
 
+from _demo_embedding import DemoEmbeddingProvider
+
 from labelrag import (
     OpenAICompatibleAnswerGenerator,
     OpenAICompatibleConfig,
@@ -42,7 +44,10 @@ def main() -> None:
     config.labelgen.extractor_mode = "heuristic"
     config.labelgen.use_graph_community_detection = False
 
-    pipeline = RAGPipeline(config)
+    pipeline = RAGPipeline(
+        config,
+        embedding_provider=DemoEmbeddingProvider(),
+    )
     pipeline.fit(
         [
             "OpenAI builds language models for developers.",

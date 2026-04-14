@@ -1,12 +1,24 @@
 """Record-oriented inspection API example for labelrag."""
 
-from labelrag import RAGPipeline, RAGPipelineConfig
+from _demo_embedding import DemoEmbeddingProvider
+
+from labelrag import (
+    RAGPipeline,
+    RAGPipelineConfig,
+)
 
 
 def main() -> None:
     """Fit a small corpus and inspect paragraph, label, and concept records."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    config = RAGPipelineConfig()
+    config.labelgen.extractor_mode = "heuristic"
+    config.labelgen.use_graph_community_detection = False
+
+    pipeline = RAGPipeline(
+        config,
+        embedding_provider=DemoEmbeddingProvider(),
+    )
     pipeline.fit(
         [
             "OpenAI builds language models for developers.",
