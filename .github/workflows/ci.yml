@@ -26,6 +26,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .[dev]
 
+      - name: Install spaCy model
+        run: python -m spacy download en_core_web_sm
+
       - name: Run Ruff
         run: ruff check .
 
