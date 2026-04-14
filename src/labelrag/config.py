@@ -6,6 +6,16 @@ from labelgen import LabelGeneratorConfig
 
 
 @dataclass(slots=True)
+class EmbeddingConfig:
+    """Configuration for paragraph/query embedding behavior."""
+
+    provider: str = "sentence-transformers"
+    model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    dimensions: int | None = None
+    normalize: bool = True
+
+
+@dataclass(slots=True)
 class RetrievalConfig:
     """Configuration for paragraph retrieval behavior."""
 
@@ -28,6 +38,6 @@ class RAGPipelineConfig:
     """Top-level public configuration for `RAGPipeline`."""
 
     labelgen: LabelGeneratorConfig = field(default_factory=LabelGeneratorConfig)
+    embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
     prompt: PromptConfig = field(default_factory=PromptConfig)
-
