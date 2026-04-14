@@ -5,12 +5,13 @@ from pathlib import Path
 import pytest
 
 from labelrag import RAGPipeline, RAGPipelineConfig
+from support import StubEmbeddingProvider
 
 
 def _build_fitted_pipeline() -> RAGPipeline:
     """Construct a fitted pipeline with stable paragraph metadata."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline = RAGPipeline(RAGPipelineConfig(), embedding_provider=StubEmbeddingProvider())
     pipeline.fit(
         [
             "OpenAI builds language models for developers.",
@@ -24,7 +25,7 @@ def _build_fitted_pipeline() -> RAGPipeline:
 def test_lookup_methods_require_fit() -> None:
     """Inspection methods should require a fitted pipeline."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline = RAGPipeline(RAGPipelineConfig(), embedding_provider=StubEmbeddingProvider())
 
     with pytest.raises(RuntimeError, match="requires fit\\(\\)"):
         pipeline.get_paragraph("p0")
@@ -134,7 +135,7 @@ def test_loaded_pipeline_preserves_inspection_behavior(tmp_path: Path) -> None:
     output_dir = tmp_path / "pipeline"
     pipeline.save(output_dir, format="json.gz")
 
-    loaded = RAGPipeline.load(output_dir)
+    loaded = RAGPipeline.load(output_dir, embedding_provider=StubEmbeddingProvider())
     assert loaded.get_paragraph(paragraph_id) == pipeline.get_paragraph(paragraph_id)
     assert loaded.get_paragraph_labels(paragraph_id) == pipeline.get_paragraph_labels(paragraph_id)
     assert loaded.get_paragraph_concepts(paragraph_id) == pipeline.get_paragraph_concepts(

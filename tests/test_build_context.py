@@ -5,12 +5,13 @@ import pytest
 from labelrag import RAGPipeline, RAGPipelineConfig
 from labelrag.indexing.corpus_index import CorpusIndex
 from labelrag.types import QueryAnalysis, RetrievedParagraph
+from support import StubEmbeddingProvider
 
 
 def test_build_context_requires_fit() -> None:
     """Context building should fail clearly before the pipeline is fitted."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline = RAGPipeline(RAGPipelineConfig(), embedding_provider=StubEmbeddingProvider())
 
     with pytest.raises(RuntimeError, match="requires fit"):
         pipeline.build_context("How do developers use language models?")
@@ -19,7 +20,7 @@ def test_build_context_requires_fit() -> None:
 def test_build_context_returns_prompt_and_metadata() -> None:
     """Context building should return retrieval results, prompt text, and trace metadata."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline = RAGPipeline(RAGPipelineConfig(), embedding_provider=StubEmbeddingProvider())
     pipeline.fit(
         [
             "OpenAI builds language models for developers.",
@@ -32,7 +33,10 @@ def test_build_context_returns_prompt_and_metadata() -> None:
 
     assert result.question == "How do developers use language models?"
     assert result.query_analysis.query_text == result.question
-    assert result.metadata["retrieval_strategy"] == "greedy_label_coverage"
+    assert result.metadata["retrieval_strategy"] == "greedy_label_coverage_semantic_rerank"
+    assert result.metadata["embedding_provider"] == "stub"
+    assert result.metadata["embedding_model"] == "stub-embedding-model"
+    assert result.metadata["semantic_reranking_enabled"] is True
     assert result.metadata["query_label_ids"] == result.query_analysis.label_ids
     assert result.metadata["retrieval_limit"] == pipeline.config.retrieval.max_paragraphs
     assert result.metadata["used_label_free_fallback"] is False
@@ -54,7 +58,7 @@ def test_build_context_respects_prompt_configuration() -> None:
     config = RAGPipelineConfig()
     config.prompt.include_paragraph_ids = False
     config.prompt.max_context_characters = 20
-    pipeline = RAGPipeline(config)
+    pipeline = RAGPipeline(config, embedding_provider=StubEmbeddingProvider())
     pipeline.fit(
         [
             "OpenAI builds language models for developers.",
@@ -72,7 +76,7 @@ def test_build_context_respects_prompt_configuration() -> None:
 def test_build_context_returns_empty_retrieval_for_label_free_query() -> None:
     """Label-free queries should use the configured fallback strategy."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline = RAGPipeline(RAGPipelineConfig(), embedding_provider=StubEmbeddingProvider())
     pipeline.fit(
         [
             "OpenAI builds language models for developers.",
@@ -88,6 +92,7 @@ def test_build_context_returns_empty_retrieval_for_label_free_query() -> None:
     assert result.metadata["uncovered_label_ids"] == []
     assert result.metadata["attempted_covered_label_ids"] == []
     assert result.metadata["attempted_uncovered_label_ids"] == []
+    assert result.metadata["semantic_reranking_enabled"] is False
 
 
 def test_build_context_can_disable_label_free_fallback() -> None:
@@ -95,7 +100,7 @@ def test_build_context_can_disable_label_free_fallback() -> None:
 
     config = RAGPipelineConfig()
     config.retrieval.allow_label_free_fallback = False
-    pipeline = RAGPipeline(config)
+    pipeline = RAGPipeline(config, embedding_provider=StubEmbeddingProvider())
     pipeline.fit(
         [
             "OpenAI builds language models for developers.",
@@ -108,7 +113,7 @@ def test_build_context_can_disable_label_free_fallback() -> None:
     assert result.retrieved_paragraphs == []
     assert result.prompt_context == ""
     assert result.metadata["used_label_free_fallback"] is False
-    assert result.metadata["retrieval_strategy"] == "greedy_label_coverage"
+    assert result.metadata["retrieval_strategy"] == "greedy_label_coverage_semantic_rerank"
     assert result.metadata["attempted_covered_label_ids"] == []
     assert result.metadata["attempted_uncovered_label_ids"] == []
 
@@ -146,6 +151,7 @@ def test_build_context_can_require_full_label_coverage() -> None:
                     paragraph_concept_ids=["c1"],
                     concept_overlap_count=1,
                     marginal_gain=1,
+                    semantic_similarity=0.25,
                     retrieval_score=1.0,
                 )
             ]

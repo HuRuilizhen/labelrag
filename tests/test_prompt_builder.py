@@ -22,6 +22,7 @@ def test_build_prompt_context_includes_paragraph_ids_by_default() -> None:
                 paragraph_concept_ids=[],
                 concept_overlap_count=0,
                 marginal_gain=1,
+                semantic_similarity=0.5,
                 retrieval_score=1.0,
             )
         ],
@@ -49,6 +50,7 @@ def test_build_prompt_context_respects_character_limit() -> None:
                 paragraph_concept_ids=[],
                 concept_overlap_count=0,
                 marginal_gain=1,
+                semantic_similarity=0.5,
                 retrieval_score=1.0,
             )
         ],
@@ -75,6 +77,7 @@ def test_build_prompt_context_can_include_label_annotations() -> None:
                 paragraph_concept_ids=[],
                 concept_overlap_count=0,
                 marginal_gain=1,
+                semantic_similarity=0.5,
                 retrieval_score=1.0,
             )
         ],

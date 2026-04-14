@@ -2,9 +2,11 @@
 
 from typing import TypedDict
 
+import pytest
 from labelgen import Paragraph
 
 from labelrag import RAGPipeline, RAGPipelineConfig
+from support import StubEmbeddingProvider
 
 
 class SerializedParagraphPayload(TypedDict):
@@ -18,7 +20,7 @@ class SerializedParagraphPayload(TypedDict):
 def test_fit_returns_pipeline_for_string_inputs() -> None:
     """Fitting on raw paragraph strings should return the pipeline itself."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline = RAGPipeline(RAGPipelineConfig(), embedding_provider=StubEmbeddingProvider())
 
     fitted = pipeline.fit(
         [
@@ -37,7 +39,7 @@ def test_fit_returns_pipeline_for_string_inputs() -> None:
 def test_fit_accepts_paragraph_objects_and_preserves_metadata() -> None:
     """Fitting should accept labelgen Paragraph objects as input."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline = RAGPipeline(RAGPipelineConfig(), embedding_provider=StubEmbeddingProvider())
 
     pipeline.fit(
         [
@@ -65,7 +67,7 @@ def test_fit_accepts_paragraph_objects_and_preserves_metadata() -> None:
 def test_fit_accepts_reconstructed_serialized_paragraph_payloads() -> None:
     """Fitting should accept Paragraph objects reconstructed from serialized payloads."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline = RAGPipeline(RAGPipelineConfig(), embedding_provider=StubEmbeddingProvider())
     serialized_payloads: list[SerializedParagraphPayload] = [
         {
             "id": "",
@@ -93,7 +95,7 @@ def test_fit_accepts_reconstructed_serialized_paragraph_payloads() -> None:
 def test_fit_builds_label_and_concept_lookup_tables() -> None:
     """Fitting should build paragraph, concept, and label lookup tables."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline = RAGPipeline(RAGPipelineConfig(), embedding_provider=StubEmbeddingProvider())
     pipeline.fit(
         [
             "OpenAI builds language models for developers.",
@@ -124,3 +126,14 @@ def test_fit_builds_label_and_concept_lookup_tables() -> None:
         paragraph_record.paragraph_id
         in pipeline.corpus_index.paragraph_ids_by_concept[first_concept_id]
     )
+
+
+def test_fit_requires_embedding_provider() -> None:
+    """Fitting should fail clearly when no embedding provider is available."""
+
+    config = RAGPipelineConfig()
+    config.embedding.provider = "unsupported-provider"
+    pipeline = RAGPipeline(config)
+
+    with pytest.raises(RuntimeError, match="embedding provider"):
+        pipeline.fit(["OpenAI builds language models for developers."])

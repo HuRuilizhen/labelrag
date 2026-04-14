@@ -3,12 +3,13 @@
 import pytest
 
 from labelrag import RAGPipeline, RAGPipelineConfig
+from support import StubEmbeddingProvider
 
 
 def test_analyze_query_requires_fit() -> None:
     """Query analysis should fail clearly when the pipeline is not fitted."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline = RAGPipeline(RAGPipelineConfig(), embedding_provider=StubEmbeddingProvider())
 
     with pytest.raises(RuntimeError, match="requires fit"):
         pipeline.analyze_query("What do developers use?")
@@ -17,7 +18,7 @@ def test_analyze_query_requires_fit() -> None:
 def test_analyze_query_returns_structured_query_analysis() -> None:
     """Query analysis should reuse the fitted label space and expose concepts and labels."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline = RAGPipeline(RAGPipelineConfig(), embedding_provider=StubEmbeddingProvider())
     pipeline.fit(
         [
             "OpenAI builds language models for developers.",
@@ -38,7 +39,7 @@ def test_analyze_query_returns_structured_query_analysis() -> None:
 def test_analyze_query_uses_fitted_corpus_label_space() -> None:
     """Query analysis should not introduce concepts that are absent from the fitted corpus."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline = RAGPipeline(RAGPipelineConfig(), embedding_provider=StubEmbeddingProvider())
     pipeline.fit(
         [
             "OpenAI builds language models for developers.",

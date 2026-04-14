@@ -47,16 +47,26 @@ def test_select_greedy_paragraphs_covers_query_labels_greedily() -> None:
         label_display_names=["developers", "systems"],
     )
 
-    selected = select_greedy_paragraphs(query_analysis, corpus_index, max_paragraphs=3)
+    selected = select_greedy_paragraphs(
+        query_analysis,
+        corpus_index,
+        max_paragraphs=3,
+        semantic_similarity_for_paragraph=lambda paragraph_id: {
+            "p1": 0.2,
+            "p2": 0.3,
+            "p3": 0.9,
+        }[paragraph_id],
+    )
 
     assert [paragraph.paragraph_id for paragraph in selected] == ["p3"]
     assert selected[0].marginal_gain == 2
+    assert selected[0].semantic_similarity == 0.9
     assert selected[0].newly_covered_label_ids == ["l1", "l2"]
     assert selected[0].already_covered_label_ids == []
 
 
-def test_select_greedy_paragraphs_uses_concept_overlap_as_tiebreak() -> None:
-    """Concept overlap should break ties when label gain is the same."""
+def test_select_greedy_paragraphs_uses_semantic_similarity_as_tiebreak() -> None:
+    """Semantic similarity should break ties before concept overlap."""
 
     corpus_index = CorpusIndex(
         paragraphs_by_id={
@@ -88,9 +98,17 @@ def test_select_greedy_paragraphs_uses_concept_overlap_as_tiebreak() -> None:
         label_display_names=["developers"],
     )
 
-    selected = select_greedy_paragraphs(query_analysis, corpus_index, max_paragraphs=2)
+    selected = select_greedy_paragraphs(
+        query_analysis,
+        corpus_index,
+        max_paragraphs=2,
+        semantic_similarity_for_paragraph=lambda paragraph_id: {
+            "p1": 0.1,
+            "p2": 0.8,
+        }[paragraph_id],
+    )
 
-    assert [paragraph.paragraph_id for paragraph in selected] == ["p1"]
+    assert [paragraph.paragraph_id for paragraph in selected] == ["p2"]
 
 
 def test_select_greedy_paragraphs_uses_paragraph_id_as_final_tiebreak() -> None:
@@ -126,7 +144,12 @@ def test_select_greedy_paragraphs_uses_paragraph_id_as_final_tiebreak() -> None:
         label_display_names=["developers"],
     )
 
-    selected = select_greedy_paragraphs(query_analysis, corpus_index, max_paragraphs=2)
+    selected = select_greedy_paragraphs(
+        query_analysis,
+        corpus_index,
+        max_paragraphs=2,
+        semantic_similarity_for_paragraph=lambda _paragraph_id: 0.5,
+    )
 
     assert [paragraph.paragraph_id for paragraph in selected] == ["p1"]
 
@@ -164,7 +187,15 @@ def test_select_greedy_paragraphs_respects_max_paragraphs() -> None:
         label_display_names=["developers", "systems"],
     )
 
-    selected = select_greedy_paragraphs(query_analysis, corpus_index, max_paragraphs=1)
+    selected = select_greedy_paragraphs(
+        query_analysis,
+        corpus_index,
+        max_paragraphs=1,
+        semantic_similarity_for_paragraph=lambda paragraph_id: {
+            "p1": 0.2,
+            "p2": 0.8,
+        }[paragraph_id],
+    )
 
     assert len(selected) == 1
 
@@ -202,6 +233,60 @@ def test_select_greedy_paragraphs_tracks_already_covered_labels() -> None:
         label_display_names=["developers", "systems"],
     )
 
-    selected = select_greedy_paragraphs(query_analysis, corpus_index, max_paragraphs=2)
+    selected = select_greedy_paragraphs(
+        query_analysis,
+        corpus_index,
+        max_paragraphs=2,
+        semantic_similarity_for_paragraph=lambda paragraph_id: {
+            "p1": 0.2,
+            "p2": 0.9,
+        }[paragraph_id],
+    )
 
     assert [paragraph.paragraph_id for paragraph in selected] == ["p2"]
+
+
+def test_select_greedy_paragraphs_prefers_gain_over_semantic_similarity() -> None:
+    """Marginal gain should remain the primary greedy objective."""
+
+    corpus_index = CorpusIndex(
+        paragraphs_by_id={
+            "p1": IndexedParagraph(
+                paragraph_id="p1",
+                text="Paragraph 1",
+                metadata=None,
+                concept_ids=["c1"],
+                concept_texts=["developers"],
+                label_ids=["l1", "l2"],
+                label_display_names=["developers", "systems"],
+            ),
+            "p2": IndexedParagraph(
+                paragraph_id="p2",
+                text="Paragraph 2",
+                metadata=None,
+                concept_ids=["c1", "c2"],
+                concept_texts=["developers", "language models"],
+                label_ids=["l1"],
+                label_display_names=["developers"],
+            ),
+        }
+    )
+    query_analysis = QueryAnalysis(
+        query_text="How do developers use systems?",
+        concepts=["developers", "systems"],
+        concept_ids=["c1", "c2"],
+        label_ids=["l1", "l2"],
+        label_display_names=["developers", "systems"],
+    )
+
+    selected = select_greedy_paragraphs(
+        query_analysis,
+        corpus_index,
+        max_paragraphs=2,
+        semantic_similarity_for_paragraph=lambda paragraph_id: {
+            "p1": 0.1,
+            "p2": 0.9,
+        }[paragraph_id],
+    )
+
+    assert [paragraph.paragraph_id for paragraph in selected] == ["p1"]

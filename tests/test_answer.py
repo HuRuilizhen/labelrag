@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from labelrag import RAGPipeline, RAGPipelineConfig
 from labelrag.generation.generator import GeneratedAnswer
+from support import StubEmbeddingProvider
 
 
 @dataclass
@@ -25,7 +26,7 @@ class StubGenerator:
 def test_answer_returns_empty_text_when_no_generator_is_configured() -> None:
     """answer should still return a structured result without a generator."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline = RAGPipeline(RAGPipelineConfig(), embedding_provider=StubEmbeddingProvider())
     pipeline.fit(
         [
             "OpenAI builds language models for developers.",
@@ -44,7 +45,11 @@ def test_answer_returns_empty_text_when_no_generator_is_configured() -> None:
 def test_answer_uses_pipeline_level_generator_when_configured() -> None:
     """answer should use the generator configured on the pipeline."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig(), generator=StubGenerator("pipeline"))
+    pipeline = RAGPipeline(
+        RAGPipelineConfig(),
+        generator=StubGenerator("pipeline"),
+        embedding_provider=StubEmbeddingProvider(),
+    )
     pipeline.fit(
         [
             "OpenAI builds language models for developers.",
@@ -62,7 +67,11 @@ def test_answer_uses_pipeline_level_generator_when_configured() -> None:
 def test_answer_with_generator_overrides_pipeline_generator() -> None:
     """answer_with_generator should use the per-call generator override."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig(), generator=StubGenerator("pipeline"))
+    pipeline = RAGPipeline(
+        RAGPipelineConfig(),
+        generator=StubGenerator("pipeline"),
+        embedding_provider=StubEmbeddingProvider(),
+    )
     pipeline.fit(
         [
             "OpenAI builds language models for developers.",
@@ -83,7 +92,7 @@ def test_answer_with_generator_overrides_pipeline_generator() -> None:
 def test_answer_metadata_preserves_retrieval_trace_fields() -> None:
     """answer results should keep the retrieval metadata contract."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig())
+    pipeline = RAGPipeline(RAGPipelineConfig(), embedding_provider=StubEmbeddingProvider())
     pipeline.fit(
         [
             "OpenAI builds language models for developers.",
@@ -95,4 +104,4 @@ def test_answer_metadata_preserves_retrieval_trace_fields() -> None:
 
     assert "covered_label_ids" in result.metadata
     assert "uncovered_label_ids" in result.metadata
-    assert result.metadata["retrieval_strategy"] == "greedy_label_coverage"
+    assert result.metadata["retrieval_strategy"] == "greedy_label_coverage_semantic_rerank"
