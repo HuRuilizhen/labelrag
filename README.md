@@ -38,7 +38,6 @@ locally.
 from labelrag import (
     RAGPipeline,
     RAGPipelineConfig,
-    SentenceTransformerEmbeddingProvider,
 )
 
 paragraphs = [
@@ -51,10 +50,7 @@ config = RAGPipelineConfig()
 config.labelgen.extractor_mode = "heuristic"
 config.labelgen.use_graph_community_detection = False
 
-pipeline = RAGPipeline(
-    config,
-    embedding_provider=SentenceTransformerEmbeddingProvider(config.embedding),
-)
+pipeline = RAGPipeline(config)
 pipeline.fit(paragraphs)
 
 retrieval = pipeline.build_context("How do developers use language models?")
@@ -70,7 +66,6 @@ from labelrag import (
     OpenAICompatibleConfig,
     RAGPipeline,
     RAGPipelineConfig,
-    SentenceTransformerEmbeddingProvider,
 )
 
 paragraphs = [
@@ -83,10 +78,7 @@ config = RAGPipelineConfig()
 config.labelgen.extractor_mode = "heuristic"
 config.labelgen.use_graph_community_detection = False
 
-pipeline = RAGPipeline(
-    config,
-    embedding_provider=SentenceTransformerEmbeddingProvider(config.embedding),
-)
+pipeline = RAGPipeline(config)
 pipeline.fit(paragraphs)
 
 generator = OpenAICompatibleAnswerGenerator(
@@ -116,7 +108,7 @@ candidate-generation stage.
 - retrieval uses greedy coverage over query label IDs
 - semantic similarity is used as a secondary ranking signal inside greedy
   selection
-- label-free queries can fall back to deterministic concept overlap
+- label-free queries can use configurable fallback strategies
 - `require_full_label_coverage=True` suppresses partial retrieval results while
   preserving attempted coverage trace in metadata
 
@@ -128,8 +120,13 @@ Greedy selection order is:
 4. larger total paragraph label count
 5. lexicographically smaller `paragraph_id`
 
-`0.1.0` does not change label-free fallback. Queries without labels still use
-the existing concept-overlap fallback path when enabled.
+`0.1.1` supports three label-free fallback strategies:
+
+- `concept_overlap_only`
+- `concept_overlap_semantic_rerank`
+- `semantic_only`
+
+The default is `concept_overlap_semantic_rerank`.
 
 ## OpenAI-Compatible Provider Notes
 
@@ -182,6 +179,9 @@ Detailed API notes are available in [`docs/public_api.md`](docs/public_api.md).
 ## Embedding Notes
 
 - `RAGPipeline.fit(...)` now requires an embedding provider
+- the default runtime path is `RAGPipeline(config)` and resolves the embedding
+  provider from `config.embedding`
+- explicit `embedding_provider=` is still available as an advanced override
 - the first shipped provider is `SentenceTransformerEmbeddingProvider`
 - the default model is `sentence-transformers/all-MiniLM-L6-v2`
 - the model may be downloaded on first use
@@ -204,6 +204,7 @@ Runnable examples are available in [`examples/`](examples/):
 - [`examples/basic_usage.py`](examples/basic_usage.py)
 - [`examples/custom_config.py`](examples/custom_config.py)
 - [`examples/inspection_api.py`](examples/inspection_api.py)
+- [`examples/fallback_policies.py`](examples/fallback_policies.py)
 - [`examples/semantic_rerank.py`](examples/semantic_rerank.py)
 - [`examples/save_and_load.py`](examples/save_and_load.py)
 - [`examples/provider_answer.py`](examples/provider_answer.py)
@@ -264,7 +265,11 @@ Legacy snapshot note:
 
 - `RetrievalConfig.max_paragraphs` sets the hard retrieval limit
 - `RetrievalConfig.allow_label_free_fallback` enables deterministic concept
-  overlap fallback for label-free queries
+  fallback behavior for label-free queries
+- `RetrievalConfig.label_free_fallback_strategy` selects one of:
+  - `concept_overlap_only`
+  - `concept_overlap_semantic_rerank`
+  - `semantic_only`
 - `RetrievalConfig.require_full_label_coverage` suppresses partial retrieval
   output when not all query labels can be covered
 - `PromptConfig.include_paragraph_ids` includes stable paragraph IDs in the
