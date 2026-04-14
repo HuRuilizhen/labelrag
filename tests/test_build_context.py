@@ -37,6 +37,10 @@ def test_build_context_returns_prompt_and_metadata() -> None:
     assert result.metadata["embedding_provider"] == "stub"
     assert result.metadata["embedding_model"] == "stub-embedding-model"
     assert result.metadata["semantic_reranking_enabled"] is True
+    assert (
+        result.metadata["label_free_fallback_strategy"]
+        == "concept_overlap_semantic_rerank"
+    )
     assert result.metadata["query_label_ids"] == result.query_analysis.label_ids
     assert result.metadata["retrieval_limit"] == pipeline.config.retrieval.max_paragraphs
     assert result.metadata["used_label_free_fallback"] is False
@@ -73,10 +77,15 @@ def test_build_context_respects_prompt_configuration() -> None:
     assert len(result.prompt_context) <= 20
 
 
-def test_build_context_returns_empty_retrieval_for_label_free_query() -> None:
-    """Label-free queries should use the configured fallback strategy."""
+def test_build_context_uses_default_label_free_fallback_strategy() -> None:
+    """Label-free queries should use the default configured fallback strategy."""
 
-    pipeline = RAGPipeline(RAGPipelineConfig(), embedding_provider=StubEmbeddingProvider())
+    pipeline = RAGPipeline(
+        RAGPipelineConfig(),
+        embedding_provider=StubEmbeddingProvider(
+            {"Quantum batteries improve starship reactors.": [0.25, 0.25, 0.25]}
+        ),
+    )
     pipeline.fit(
         [
             "OpenAI builds language models for developers.",
@@ -87,12 +96,67 @@ def test_build_context_returns_empty_retrieval_for_label_free_query() -> None:
     result = pipeline.build_context("Quantum batteries improve starship reactors.")
 
     assert result.metadata["used_label_free_fallback"] is True
-    assert result.metadata["retrieval_strategy"] == "concept_overlap_fallback"
+    assert result.metadata["retrieval_strategy"] == "concept_overlap_semantic_fallback"
+    assert (
+        result.metadata["label_free_fallback_strategy"]
+        == "concept_overlap_semantic_rerank"
+    )
     assert result.metadata["covered_label_ids"] == []
     assert result.metadata["uncovered_label_ids"] == []
     assert result.metadata["attempted_covered_label_ids"] == []
     assert result.metadata["attempted_uncovered_label_ids"] == []
+    assert result.metadata["semantic_reranking_enabled"] is True
+
+
+def test_build_context_supports_concept_overlap_only_fallback() -> None:
+    """Fallback strategy should support pure concept-overlap ordering."""
+
+    config = RAGPipelineConfig()
+    config.retrieval.label_free_fallback_strategy = "concept_overlap_only"
+    pipeline = RAGPipeline(
+        config,
+        embedding_provider=StubEmbeddingProvider(
+            {"Quantum batteries improve starship reactors.": [0.25, 0.25, 0.25]}
+        ),
+    )
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+        ]
+    )
+
+    result = pipeline.build_context("Quantum batteries improve starship reactors.")
+
+    assert result.metadata["used_label_free_fallback"] is True
+    assert result.metadata["retrieval_strategy"] == "concept_overlap_only_fallback"
     assert result.metadata["semantic_reranking_enabled"] is False
+
+
+def test_build_context_supports_semantic_only_fallback() -> None:
+    """Fallback strategy should support full semantic-only ranking."""
+
+    config = RAGPipelineConfig()
+    config.retrieval.label_free_fallback_strategy = "semantic_only"
+    pipeline = RAGPipeline(
+        config,
+        embedding_provider=StubEmbeddingProvider(
+            {"Quantum batteries improve starship reactors.": [0.25, 0.25, 0.25]}
+        ),
+    )
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+        ]
+    )
+
+    result = pipeline.build_context("Quantum batteries improve starship reactors.")
+
+    assert result.metadata["used_label_free_fallback"] is True
+    assert result.metadata["retrieval_strategy"] == "semantic_only_fallback"
+    assert result.metadata["semantic_reranking_enabled"] is True
+    assert len(result.retrieved_paragraphs) == 2
 
 
 def test_build_context_can_disable_label_free_fallback() -> None:
@@ -113,7 +177,7 @@ def test_build_context_can_disable_label_free_fallback() -> None:
     assert result.retrieved_paragraphs == []
     assert result.prompt_context == ""
     assert result.metadata["used_label_free_fallback"] is False
-    assert result.metadata["retrieval_strategy"] == "greedy_label_coverage_semantic_rerank"
+    assert result.metadata["retrieval_strategy"] == "no_retrieval"
     assert result.metadata["attempted_covered_label_ids"] == []
     assert result.metadata["attempted_uncovered_label_ids"] == []
     assert result.metadata["semantic_reranking_enabled"] is False
@@ -140,7 +204,7 @@ def test_build_context_can_require_full_label_coverage() -> None:
         def _retrieve_paragraphs(
             self,
             query_analysis: QueryAnalysis,
-        ) -> tuple[list[RetrievedParagraph], bool]:
+        ) -> tuple[list[RetrievedParagraph], bool, str]:
             del query_analysis
             return (
                 [
@@ -161,6 +225,7 @@ def test_build_context_can_require_full_label_coverage() -> None:
                     )
                 ],
                 True,
+                "greedy_label_coverage_semantic_rerank",
             )
 
     config = RAGPipelineConfig()
