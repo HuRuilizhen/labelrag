@@ -62,7 +62,9 @@ class SentenceTransformerEmbeddingProvider:
             sentence_transformers = importlib.import_module("sentence_transformers")
         except ImportError as error:
             raise RuntimeError(
-                "sentence-transformers is required for SentenceTransformerEmbeddingProvider."
+                "sentence-transformers is required for SentenceTransformerEmbeddingProvider. "
+                "Install labelrag with the embedding dependency path available, for example "
+                "`pip install -e .` in this repository."
             ) from error
 
         sentence_transformer = getattr(sentence_transformers, "SentenceTransformer", None)
@@ -70,5 +72,12 @@ class SentenceTransformerEmbeddingProvider:
             raise RuntimeError(
                 "sentence-transformers.SentenceTransformer is unavailable in the installed package."
             )
-        self._model = sentence_transformer(self._config.model)
+        try:
+            self._model = sentence_transformer(self._config.model)
+        except Exception as error:  # pragma: no cover - exercised via tests with monkeypatch
+            raise RuntimeError(
+                "Failed to load sentence-transformers model "
+                f"{self._config.model!r}. Verify the model name and ensure the model is "
+                "available locally or downloadable from Hugging Face."
+            ) from error
         return self._model
