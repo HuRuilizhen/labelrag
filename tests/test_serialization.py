@@ -425,8 +425,41 @@ def test_load_rejects_legacy_snapshot_without_available_embedding_provider(
     config_data["embedding"]["provider"] = "unsupported-provider"
     config_path.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
 
-    with pytest.raises(RuntimeError, match="require an embedding provider"):
+    with pytest.raises(RuntimeError, match="Unsupported embedding provider"):
         RAGPipeline.load(output_dir, embedding_provider=None)
+
+
+def test_load_rebuilds_legacy_embeddings_via_default_provider_construction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy snapshots should rebuild embeddings through config-driven provider construction."""
+
+    pipeline = _build_pipeline()
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+        ]
+    )
+
+    output_dir = tmp_path / "pipeline"
+    pipeline.save(output_dir)
+    (output_dir / "manifest.json").unlink()
+    (output_dir / "paragraph_embeddings.npz").unlink()
+
+    def build_stub_provider(_: object) -> StubEmbeddingProvider:
+        return StubEmbeddingProvider()
+
+    monkeypatch.setattr(
+        rag_pipeline_module,
+        "SentenceTransformerEmbeddingProvider",
+        build_stub_provider,
+    )
+
+    loaded = RAGPipeline.load(output_dir, embedding_provider=None)
+
+    assert loaded.build_context("How do developers use language models?").prompt_context
 
 
 def test_load_rejects_manifest_without_labelrag_version(tmp_path: Path) -> None:
