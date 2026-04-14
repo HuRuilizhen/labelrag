@@ -43,7 +43,9 @@ from labelrag.io.serialize import (
 )
 from labelrag.retrieval.selector import (
     select_concept_overlap_fallback,
+    select_concept_overlap_semantic_fallback,
     select_greedy_paragraphs,
+    select_semantic_only_fallback,
 )
 from labelrag.types import (
     ConceptRecord,
@@ -245,7 +247,7 @@ class RAGPipeline:
     def _retrieve_paragraphs(
         self,
         query_analysis: QueryAnalysis,
-    ) -> tuple[list[RetrievedParagraph], bool]:
+    ) -> tuple[list[RetrievedParagraph], bool, str]:
         """Retrieve paragraphs for a analyzed query using greedy label coverage."""
 
         self._require_fitted()
@@ -254,14 +256,51 @@ class RAGPipeline:
 
         if not query_analysis.label_ids:
             if not self.config.retrieval.allow_label_free_fallback:
-                return [], False
-            return (
-                select_concept_overlap_fallback(
-                    query_analysis,
-                    self._corpus_index,
-                    max_paragraphs=self.config.retrieval.max_paragraphs,
-                ),
-                False,
+                return [], False, "no_retrieval"
+            strategy = self.config.retrieval.label_free_fallback_strategy
+            if strategy == "concept_overlap_only":
+                return (
+                    select_concept_overlap_fallback(
+                        query_analysis,
+                        self._corpus_index,
+                        max_paragraphs=self.config.retrieval.max_paragraphs,
+                    ),
+                    False,
+                    "concept_overlap_only_fallback",
+                )
+            semantic_similarity_by_paragraph = self._semantic_similarity_lookup(
+                question=query_analysis.query_text
+            )
+            
+            def semantic_similarity_for_paragraph(paragraph_id: str) -> float:
+                return semantic_similarity_by_paragraph[paragraph_id]
+
+            if strategy == "concept_overlap_semantic_rerank":
+                return (
+                    select_concept_overlap_semantic_fallback(
+                        query_analysis,
+                        self._corpus_index,
+                        max_paragraphs=self.config.retrieval.max_paragraphs,
+                        semantic_similarity_for_paragraph=semantic_similarity_for_paragraph,
+                    ),
+                    True,
+                    "concept_overlap_semantic_fallback",
+                )
+            if strategy == "semantic_only":
+                return (
+                    select_semantic_only_fallback(
+                        query_analysis,
+                        self._corpus_index,
+                        max_paragraphs=self.config.retrieval.max_paragraphs,
+                        semantic_similarity_for_paragraph=semantic_similarity_for_paragraph,
+                    ),
+                    True,
+                    "semantic_only_fallback",
+                )
+            raise RuntimeError(
+                "Unsupported label-free fallback strategy "
+                f"{strategy!r}. Supported strategies: 'concept_overlap_only', "
+                "'concept_overlap_semantic_rerank', 'semantic_only'."
             )
 
         semantic_similarity_by_paragraph = self._semantic_similarity_lookup(
@@ -277,15 +316,18 @@ class RAGPipeline:
                 ),
             ),
             True,
+            "greedy_label_coverage_semantic_rerank",
         )
 
     def build_context(self, question: str) -> RetrievalResult:
         """Build retrieval context for a question."""
 
         query_analysis = self.analyze_query(question)
-        retrieved_paragraphs, semantic_reranking_used = self._retrieve_paragraphs(
-            query_analysis
-        )
+        (
+            retrieved_paragraphs,
+            semantic_reranking_used,
+            retrieval_strategy,
+        ) = self._retrieve_paragraphs(query_analysis)
         attempted_covered_label_ids = sorted(
             {
                 label_id
@@ -300,12 +342,6 @@ class RAGPipeline:
             not query_analysis.label_ids and self.config.retrieval.allow_label_free_fallback
         )
         full_label_coverage_met = not attempted_uncovered_label_ids
-        retrieval_strategy = (
-            "concept_overlap_fallback"
-            if used_label_free_fallback
-            else "greedy_label_coverage_semantic_rerank"
-        )
-
         if self.config.retrieval.require_full_label_coverage and not full_label_coverage_met:
             retrieved_paragraphs = []
 
@@ -333,6 +369,7 @@ class RAGPipeline:
                 "query_label_ids": list(query_analysis.label_ids),
                 "retrieval_limit": self.config.retrieval.max_paragraphs,
                 "used_label_free_fallback": used_label_free_fallback,
+                "label_free_fallback_strategy": self.config.retrieval.label_free_fallback_strategy,
                 "require_full_label_coverage": self.config.retrieval.require_full_label_coverage,
                 "full_label_coverage_met": full_label_coverage_met,
                 "embedding_provider": (
