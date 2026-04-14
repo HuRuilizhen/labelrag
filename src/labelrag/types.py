@@ -62,6 +62,7 @@ class RetrievedParagraph:
     paragraph_concept_ids: list[str]
     concept_overlap_count: int
     marginal_gain: int
+    semantic_similarity: float | None
     retrieval_score: float
 
 

@@ -1,5 +1,7 @@
 """Selection helpers for greedy retrieval ranking."""
 
+from collections.abc import Callable
+
 from labelrag.indexing.corpus_index import CorpusIndex
 from labelrag.retrieval.coverage import uncovered_overlap_size
 from labelrag.types import QueryAnalysis, RetrievedParagraph
@@ -14,6 +16,7 @@ def rank_retrieved_paragraphs(
         paragraphs,
         key=lambda item: (
             -item.marginal_gain,
+            -(item.semantic_similarity or 0.0),
             -len(item.matched_concept_ids),
             -len(item.paragraph_label_ids),
             item.paragraph_id,
@@ -26,6 +29,7 @@ def select_greedy_paragraphs(
     corpus_index: CorpusIndex,
     *,
     max_paragraphs: int,
+    semantic_similarity_for_paragraph: Callable[[str], float],
 ) -> list[RetrievedParagraph]:
     """Select paragraphs by greedy coverage over query label IDs."""
 
@@ -37,7 +41,7 @@ def select_greedy_paragraphs(
 
     while remaining_label_ids and len(selected) < max_paragraphs:
         best_candidate: RetrievedParagraph | None = None
-        best_sort_key: tuple[int, int, int, str] | None = None
+        best_sort_key: tuple[int, float, int, int, str] | None = None
 
         for paragraph_id, paragraph in corpus_index.paragraphs_by_id.items():
             if paragraph_id in selected_paragraph_ids:
@@ -53,6 +57,7 @@ def select_greedy_paragraphs(
             already_covered_label_ids = sorted(
                 (paragraph_label_ids & query_label_ids) - set(newly_covered_label_ids)
             )
+            semantic_similarity = semantic_similarity_for_paragraph(paragraph.paragraph_id)
             candidate = RetrievedParagraph(
                 paragraph_id=paragraph.paragraph_id,
                 text=paragraph.text,
@@ -65,10 +70,12 @@ def select_greedy_paragraphs(
                 paragraph_concept_ids=list(paragraph.concept_ids),
                 concept_overlap_count=len(matched_concept_ids),
                 marginal_gain=gain,
+                semantic_similarity=semantic_similarity,
                 retrieval_score=float(gain),
             )
             sort_key = (
                 gain,
+                semantic_similarity,
                 len(matched_concept_ids),
                 len(paragraph.label_ids),
                 _reverse_lexicographic_key(paragraph.paragraph_id),
@@ -115,6 +122,7 @@ def select_concept_overlap_fallback(
                 paragraph_concept_ids=list(paragraph.concept_ids),
                 concept_overlap_count=len(matched_concept_ids),
                 marginal_gain=0,
+                semantic_similarity=None,
                 retrieval_score=float(len(matched_concept_ids)),
             )
         )

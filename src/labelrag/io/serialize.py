@@ -14,13 +14,14 @@ from typing import Any, Literal, TypeVar, cast
 from labelgen import LabelGenerationResult
 from labelgen.io.serialize import config_from_dict, config_to_dict
 
-from labelrag.config import PromptConfig, RAGPipelineConfig, RetrievalConfig
+from labelrag.config import EmbeddingConfig, PromptConfig, RAGPipelineConfig, RetrievalConfig
 from labelrag.indexing.corpus_index import CorpusIndex
 from labelrag.types import IndexedParagraph
 
 PersistenceFormat = Literal["json", "json.gz"]
 _ARTIFACT_STEMS = ("manifest", "config", "label_generator", "fit_result", "corpus_index")
 _CORE_ARTIFACT_STEMS = ("config", "label_generator", "fit_result", "corpus_index")
+_EXTRA_ARTIFACTS = ("paragraph_embeddings.npz",)
 _T = TypeVar("_T")
 
 
@@ -205,6 +206,11 @@ def ensure_persistence_artifacts_exist(
         for stem in stems
         if not (path := persistence_path(source, stem, format)).is_file()
     ]
+    missing_paths.extend(
+        artifact_name
+        for artifact_name in _EXTRA_ARTIFACTS
+        if not (source / artifact_name).is_file()
+    )
     if missing_paths:
         missing = ", ".join(missing_paths)
         raise RuntimeError(
@@ -257,7 +263,7 @@ def validate_manifest(
     expected_artifacts = [
         persistence_path(".", stem, format).name
         for stem in _ARTIFACT_STEMS
-    ]
+    ] + list(_EXTRA_ARTIFACTS)
     missing_artifacts = [
         artifact_name
         for artifact_name in expected_artifacts
@@ -298,6 +304,7 @@ def pipeline_config_to_dict(config: RAGPipelineConfig) -> dict[str, Any]:
 
     return {
         "labelgen": config_to_dict(config.labelgen),
+        "embedding": asdict(config.embedding),
         "retrieval": asdict(config.retrieval),
         "prompt": asdict(config.prompt),
     }
@@ -306,10 +313,12 @@ def pipeline_config_to_dict(config: RAGPipelineConfig) -> dict[str, Any]:
 def pipeline_config_from_dict(data: dict[str, Any]) -> RAGPipelineConfig:
     """Reconstruct a pipeline config from serialized data."""
 
+    embedding_data = _as_string_key_dict(data.get("embedding"))
     retrieval_data = _as_string_key_dict(data.get("retrieval"))
     prompt_data = _as_string_key_dict(data.get("prompt"))
     return RAGPipelineConfig(
         labelgen=config_from_dict(_as_string_key_dict(data.get("labelgen"))),
+        embedding=EmbeddingConfig(**embedding_data),
         retrieval=RetrievalConfig(**retrieval_data),
         prompt=PromptConfig(**prompt_data),
     )
