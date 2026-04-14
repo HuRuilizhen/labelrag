@@ -333,6 +333,62 @@ def test_load_rebuilds_legacy_concept_reverse_lookups(tmp_path: Path) -> None:
     assert loaded.corpus_index.concept_texts_by_id[concept_id] in paragraph.concept_texts
 
 
+def test_load_rebuilds_legacy_embeddings_without_embedding_artifact(tmp_path: Path) -> None:
+    """Legacy snapshots should rebuild paragraph embeddings when the artifact is absent."""
+
+    pipeline = _build_pipeline()
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+            "Production systems need monitoring and evaluation tooling.",
+        ]
+    )
+
+    output_dir = tmp_path / "pipeline"
+    pipeline.save(output_dir)
+    (output_dir / "manifest.json").unlink()
+    (output_dir / "paragraph_embeddings.npz").unlink()
+
+    config_path = output_dir / "config.json"
+    config_data = json.loads(config_path.read_text(encoding="utf-8"))
+    config_data.pop("embedding", None)
+    config_path.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
+
+    loaded = RAGPipeline.load(output_dir, embedding_provider=StubEmbeddingProvider())
+    result = loaded.build_context("How do developers use language models?")
+
+    assert result.prompt_context
+    assert loaded.corpus_index is not None
+    assert loaded.fit_result == pipeline.fit_result
+
+
+def test_load_rejects_legacy_snapshot_without_available_embedding_provider(
+    tmp_path: Path,
+) -> None:
+    """Legacy snapshots without embedding artifacts should require an available provider."""
+
+    pipeline = _build_pipeline()
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+        ]
+    )
+
+    output_dir = tmp_path / "pipeline"
+    pipeline.save(output_dir)
+    (output_dir / "manifest.json").unlink()
+    (output_dir / "paragraph_embeddings.npz").unlink()
+    config_path = output_dir / "config.json"
+    config_data = json.loads(config_path.read_text(encoding="utf-8"))
+    config_data["embedding"]["provider"] = "unsupported-provider"
+    config_path.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="require an embedding provider"):
+        RAGPipeline.load(output_dir, embedding_provider=None)
+
+
 def test_load_rejects_manifest_without_labelrag_version(tmp_path: Path) -> None:
     """Loading should fail when the manifest omits the required package version field."""
 

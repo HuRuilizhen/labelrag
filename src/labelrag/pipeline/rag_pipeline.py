@@ -437,6 +437,7 @@ class RAGPipeline:
             source,
             persistence_format,
             include_manifest=include_manifest,
+            include_embedding_artifact=include_manifest,
         )
         if include_manifest:
             validate_manifest(
@@ -460,9 +461,16 @@ class RAGPipeline:
             pipeline._fit_result,
         )
         embeddings_path = source / "paragraph_embeddings.npz"
-        if not embeddings_path.is_file():
+        if embeddings_path.is_file():
+            pipeline._paragraph_embeddings = load_paragraph_embedding_store(embeddings_path)
+        elif include_manifest:
             raise RuntimeError("Missing persistence artifact: paragraph_embeddings.npz.")
-        pipeline._paragraph_embeddings = load_paragraph_embedding_store(embeddings_path)
+        else:
+            pipeline._paragraph_embeddings = _rebuild_legacy_paragraph_embeddings(
+                pipeline._corpus_index,
+                pipeline._embedding_provider,
+                pipeline.config.embedding.normalize,
+            )
         _validate_paragraph_embeddings(pipeline._paragraph_embeddings, pipeline._corpus_index)
         return pipeline
 
@@ -631,3 +639,41 @@ def _validate_paragraph_embeddings(
         raise RuntimeError(
             "Stored paragraph embeddings row count does not match stored paragraph IDs."
         )
+
+
+def _rebuild_legacy_paragraph_embeddings(
+    corpus_index: CorpusIndex | None,
+    embedding_provider: EmbeddingProvider | None,
+    normalize: bool,
+) -> ParagraphEmbeddingStore:
+    """Rebuild paragraph embeddings for snapshots that predate the embedding artifact."""
+
+    if corpus_index is None:
+        raise RuntimeError("Cannot rebuild legacy paragraph embeddings without a corpus index.")
+    if embedding_provider is None:
+        raise RuntimeError(
+            "Legacy snapshots without paragraph_embeddings.npz require an embedding provider "
+            "to rebuild paragraph embeddings during load."
+        )
+
+    paragraph_ids = sorted(corpus_index.paragraphs_by_id)
+    embeddings = embedding_provider.embed_documents(
+        [corpus_index.paragraphs_by_id[paragraph_id].text for paragraph_id in paragraph_ids]
+    )
+    if len(embeddings) != len(paragraph_ids):
+        raise RuntimeError(
+            "Embedding provider returned an unexpected number of document embeddings while "
+            "rebuilding a legacy snapshot."
+        )
+    matrix = np.asarray(embeddings, dtype=np.float32)
+    if matrix.ndim != 2:
+        raise RuntimeError("Document embeddings must form a two-dimensional matrix.")
+    if normalize:
+        matrix = _normalize_embedding_rows(matrix)
+    return ParagraphEmbeddingStore(
+        paragraph_ids=paragraph_ids,
+        matrix=matrix,
+        provider_name=embedding_provider.provider_name,
+        model_name=embedding_provider.model_name,
+        normalized=normalize,
+    )
