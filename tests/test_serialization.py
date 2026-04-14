@@ -283,6 +283,46 @@ def test_load_supports_legacy_snapshot_without_manifest(tmp_path: Path) -> None:
     assert loaded.fit_result == pipeline.fit_result
 
 
+def test_load_supports_legacy_manifest_snapshot_without_embedding_artifact(
+    tmp_path: Path,
+) -> None:
+    """Legacy snapshots with manifests should still load without embedding artifacts."""
+
+    pipeline = _build_pipeline()
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+            "Production systems need monitoring and evaluation tooling.",
+        ]
+    )
+
+    output_dir = tmp_path / "pipeline"
+    pipeline.save(output_dir)
+    (output_dir / "paragraph_embeddings.npz").unlink()
+
+    manifest_path = output_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["labelrag_version"] = "0.0.3"
+    manifest["artifacts"] = [
+        artifact_name
+        for artifact_name in manifest["artifacts"]
+        if artifact_name != "paragraph_embeddings.npz"
+    ]
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    config_path = output_dir / "config.json"
+    config_data = json.loads(config_path.read_text(encoding="utf-8"))
+    config_data.pop("embedding", None)
+    config_path.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
+
+    loaded = RAGPipeline.load(output_dir, embedding_provider=StubEmbeddingProvider())
+    result = loaded.build_context("How do developers use language models?")
+
+    assert result.prompt_context
+    assert loaded.fit_result == pipeline.fit_result
+
+
 def test_pipeline_config_from_dict_defaults_missing_embedding_config() -> None:
     """Legacy configs without an embedding block should use the default embedding config."""
 

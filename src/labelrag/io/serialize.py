@@ -265,7 +265,9 @@ def validate_manifest(
     expected_artifacts = [
         persistence_path(".", stem, format).name
         for stem in _ARTIFACT_STEMS
-    ] + list(_EXTRA_ARTIFACTS)
+    ]
+    if _manifest_requires_embedding_artifact(data):
+        expected_artifacts.extend(_EXTRA_ARTIFACTS)
     missing_artifacts = [
         artifact_name
         for artifact_name in expected_artifacts
@@ -285,6 +287,31 @@ def _normalize_persistence_format(value: str) -> PersistenceFormat:
     if value not in {"json", "json.gz"}:
         raise ValueError("Persistence format must be either `json` or `json.gz`.")
     return cast(PersistenceFormat, value)
+
+
+def _manifest_requires_embedding_artifact(data: dict[str, Any]) -> bool:
+    """Return whether a manifest should include the embedding artifact entry."""
+
+    version = data.get("labelrag_version")
+    if not isinstance(version, str):
+        return False
+    parsed = _parse_semver_prefix(version)
+    if parsed is None:
+        return False
+    return parsed >= (0, 1, 0)
+
+
+def _parse_semver_prefix(version: str) -> tuple[int, int, int] | None:
+    """Parse a best-effort `major.minor.patch` tuple from a version string."""
+
+    core = version.split("-", maxsplit=1)[0]
+    parts = core.split(".")
+    if len(parts) < 3:
+        return None
+    try:
+        return (int(parts[0]), int(parts[1]), int(parts[2]))
+    except ValueError:
+        return None
 
 
 def _as_string_key_dict(value: object) -> dict[str, Any]:

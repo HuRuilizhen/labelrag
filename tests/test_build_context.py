@@ -116,6 +116,7 @@ def test_build_context_can_disable_label_free_fallback() -> None:
     assert result.metadata["retrieval_strategy"] == "greedy_label_coverage_semantic_rerank"
     assert result.metadata["attempted_covered_label_ids"] == []
     assert result.metadata["attempted_uncovered_label_ids"] == []
+    assert result.metadata["semantic_reranking_enabled"] is False
 
 
 def test_build_context_can_require_full_label_coverage() -> None:
@@ -136,25 +137,31 @@ def test_build_context_can_require_full_label_coverage() -> None:
                 label_display_names=["developers", "monitoring"],
             )
 
-        def _retrieve_paragraphs(self, query_analysis: QueryAnalysis) -> list[RetrievedParagraph]:
+        def _retrieve_paragraphs(
+            self,
+            query_analysis: QueryAnalysis,
+        ) -> tuple[list[RetrievedParagraph], bool]:
             del query_analysis
-            return [
-                RetrievedParagraph(
-                    paragraph_id="p1",
-                    text="Paragraph 1",
-                    metadata=None,
-                    newly_covered_label_ids=["l1"],
-                    already_covered_label_ids=[],
-                    matched_label_ids=["l1"],
-                    matched_concept_ids=["c1"],
-                    paragraph_label_ids=["l1"],
-                    paragraph_concept_ids=["c1"],
-                    concept_overlap_count=1,
-                    marginal_gain=1,
-                    semantic_similarity=0.25,
-                    retrieval_score=1.0,
-                )
-            ]
+            return (
+                [
+                    RetrievedParagraph(
+                        paragraph_id="p1",
+                        text="Paragraph 1",
+                        metadata=None,
+                        newly_covered_label_ids=["l1"],
+                        already_covered_label_ids=[],
+                        matched_label_ids=["l1"],
+                        matched_concept_ids=["c1"],
+                        paragraph_label_ids=["l1"],
+                        paragraph_concept_ids=["c1"],
+                        concept_overlap_count=1,
+                        marginal_gain=1,
+                        semantic_similarity=0.25,
+                        retrieval_score=1.0,
+                    )
+                ],
+                True,
+            )
 
     config = RAGPipelineConfig()
     config.retrieval.require_full_label_coverage = True

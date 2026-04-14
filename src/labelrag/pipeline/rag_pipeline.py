@@ -6,7 +6,7 @@ import tomllib
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 from labelgen import LabelGenerationResult, LabelGenerator, Paragraph, dump_result, load_result
@@ -241,7 +241,10 @@ class RAGPipeline:
             ],
         )
 
-    def _retrieve_paragraphs(self, query_analysis: QueryAnalysis) -> list[RetrievedParagraph]:
+    def _retrieve_paragraphs(
+        self,
+        query_analysis: QueryAnalysis,
+    ) -> tuple[list[RetrievedParagraph], bool]:
         """Retrieve paragraphs for a analyzed query using greedy label coverage."""
 
         self._require_fitted()
@@ -254,30 +257,38 @@ class RAGPipeline:
 
         if not query_analysis.label_ids:
             if not self.config.retrieval.allow_label_free_fallback:
-                return []
-            return select_concept_overlap_fallback(
-                query_analysis,
-                self._corpus_index,
-                max_paragraphs=self.config.retrieval.max_paragraphs,
+                return [], False
+            return (
+                select_concept_overlap_fallback(
+                    query_analysis,
+                    self._corpus_index,
+                    max_paragraphs=self.config.retrieval.max_paragraphs,
+                ),
+                False,
             )
 
         semantic_similarity_by_paragraph = self._semantic_similarity_lookup(
             question=query_analysis.query_text
         )
-        return select_greedy_paragraphs(
-            query_analysis,
-            self._corpus_index,
-            max_paragraphs=self.config.retrieval.max_paragraphs,
-            semantic_similarity_for_paragraph=lambda paragraph_id: semantic_similarity_by_paragraph[
-                paragraph_id
-            ],
+        return (
+            select_greedy_paragraphs(
+                query_analysis,
+                self._corpus_index,
+                max_paragraphs=self.config.retrieval.max_paragraphs,
+                semantic_similarity_for_paragraph=(
+                    lambda paragraph_id: semantic_similarity_by_paragraph[paragraph_id]
+                ),
+            ),
+            True,
         )
 
     def build_context(self, question: str) -> RetrievalResult:
         """Build retrieval context for a question."""
 
         query_analysis = self.analyze_query(question)
-        retrieved_paragraphs = self._retrieve_paragraphs(query_analysis)
+        retrieved_paragraphs, semantic_reranking_used = self._retrieve_paragraphs(
+            query_analysis
+        )
         attempted_covered_label_ids = sorted(
             {
                 label_id
@@ -337,7 +348,7 @@ class RAGPipeline:
                     if self._paragraph_embeddings is not None
                     else ""
                 ),
-                "semantic_reranking_enabled": not used_label_free_fallback,
+                "semantic_reranking_enabled": semantic_reranking_used,
             },
         )
 
@@ -437,11 +448,13 @@ class RAGPipeline:
             source,
             persistence_format,
             include_manifest=include_manifest,
-            include_embedding_artifact=include_manifest,
+            include_embedding_artifact=False,
         )
+        manifest_data: dict[str, Any] | None = None
         if include_manifest:
+            manifest_data = load_json(persistence_path(source, "manifest", persistence_format))
             validate_manifest(
-                load_json(persistence_path(source, "manifest", persistence_format)),
+                manifest_data,
                 format=persistence_format,
             )
         config = pipeline_config_from_dict(
@@ -461,9 +474,12 @@ class RAGPipeline:
             pipeline._fit_result,
         )
         embeddings_path = source / "paragraph_embeddings.npz"
+        embedding_artifact_expected = manifest_data is not None and "paragraph_embeddings.npz" in (
+            [str(value) for value in manifest_data.get("artifacts", [])]
+        )
         if embeddings_path.is_file():
             pipeline._paragraph_embeddings = load_paragraph_embedding_store(embeddings_path)
-        elif include_manifest:
+        elif embedding_artifact_expected:
             raise RuntimeError("Missing persistence artifact: paragraph_embeddings.npz.")
         else:
             pipeline._paragraph_embeddings = _rebuild_legacy_paragraph_embeddings(
