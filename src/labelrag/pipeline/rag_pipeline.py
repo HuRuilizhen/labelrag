@@ -90,9 +90,6 @@ class RAGPipeline:
     def fit(self, paragraphs: list[str] | list[Paragraph]) -> RAGPipeline:
         """Fit the pipeline on a paragraph corpus."""
 
-        if self._embedding_provider is None:
-            raise RuntimeError("RAGPipeline.fit() requires an embedding provider.")
-
         label_generator = LabelGenerator(self.config.labelgen)
         result = label_generator.fit_transform(paragraphs)
         corpus_index = build_corpus_index(result)
@@ -254,10 +251,6 @@ class RAGPipeline:
         self._require_fitted()
         assert self._corpus_index is not None
         assert self._paragraph_embeddings is not None
-        if self._embedding_provider is None:
-            raise RuntimeError(
-                "RAGPipeline requires an embedding provider before query-time operations."
-            )
 
         if not query_analysis.label_ids:
             if not self.config.retrieval.allow_label_free_fallback:
@@ -620,12 +613,15 @@ def _package_version() -> str:
         ) from err
 
 
-def _build_embedding_provider(config: EmbeddingConfig) -> EmbeddingProvider | None:
+def _build_embedding_provider(config: EmbeddingConfig) -> EmbeddingProvider:
     """Build a supported embedding provider from configuration."""
 
     if config.provider == "sentence-transformers":
         return SentenceTransformerEmbeddingProvider(config)
-    return None
+    raise RuntimeError(
+        "Unsupported embedding provider "
+        f"{config.provider!r}. Supported providers: 'sentence-transformers'."
+    )
 
 
 def _normalize_embedding(embedding: np.ndarray) -> np.ndarray:
