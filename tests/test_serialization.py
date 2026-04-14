@@ -12,7 +12,7 @@ from labelrag import EmbeddingConfig, RAGPipeline, RAGPipelineConfig
 from labelrag.generation.generator import GeneratedAnswer
 from labelrag.io.serialize import pipeline_config_from_dict
 from labelrag.pipeline import rag_pipeline as rag_pipeline_module
-from support import StubEmbeddingProvider
+from support import AlternateStubEmbeddingProvider, StubEmbeddingProvider
 
 
 @dataclass
@@ -608,3 +608,21 @@ def test_load_rejects_inconsistent_embedding_artifact(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="paragraph IDs"):
         RAGPipeline.load(output_dir, embedding_provider=StubEmbeddingProvider())
+
+
+def test_load_rejects_embedding_provider_mismatch(tmp_path: Path) -> None:
+    """Loading should fail when the active provider does not match persisted embeddings."""
+
+    pipeline = _build_pipeline()
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+        ]
+    )
+
+    output_dir = tmp_path / "pipeline"
+    pipeline.save(output_dir)
+
+    with pytest.raises(RuntimeError, match="different embedding provider"):
+        RAGPipeline.load(output_dir, embedding_provider=AlternateStubEmbeddingProvider())

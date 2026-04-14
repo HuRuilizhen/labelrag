@@ -6,7 +6,7 @@ import pytest
 from labelgen import Paragraph
 
 from labelrag import RAGPipeline, RAGPipelineConfig
-from support import StubEmbeddingProvider
+from support import FailingEmbeddingProvider, StubEmbeddingProvider
 
 
 class SerializedParagraphPayload(TypedDict):
@@ -137,3 +137,21 @@ def test_fit_requires_embedding_provider() -> None:
 
     with pytest.raises(RuntimeError, match="embedding provider"):
         pipeline.fit(["OpenAI builds language models for developers."])
+
+
+def test_fit_does_not_leave_partial_state_after_embedding_failure() -> None:
+    """Embedding failures should not leave the pipeline in a half-fitted state."""
+
+    pipeline = RAGPipeline(
+        RAGPipelineConfig(),
+        embedding_provider=FailingEmbeddingProvider(),
+    )
+
+    with pytest.raises(RuntimeError, match="simulated embedding failure"):
+        pipeline.fit(["OpenAI builds language models for developers."])
+
+    assert pipeline.fit_result is None
+    assert pipeline.corpus_index is None
+
+    with pytest.raises(RuntimeError, match="requires fit"):
+        pipeline.build_context("How do developers use language models?")

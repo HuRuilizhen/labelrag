@@ -93,13 +93,13 @@ class RAGPipeline:
         if self._embedding_provider is None:
             raise RuntimeError("RAGPipeline.fit() requires an embedding provider.")
 
-        result = self._label_generator.fit_transform(paragraphs)
-        self._fit_result = result
-        self._corpus_index = build_corpus_index(result)
-        paragraph_ids = sorted(self._corpus_index.paragraphs_by_id)
+        label_generator = LabelGenerator(self.config.labelgen)
+        result = label_generator.fit_transform(paragraphs)
+        corpus_index = build_corpus_index(result)
+        paragraph_ids = sorted(corpus_index.paragraphs_by_id)
         embeddings = self._embedding_provider.embed_documents(
             [
-                self._corpus_index.paragraphs_by_id[paragraph_id].text
+                corpus_index.paragraphs_by_id[paragraph_id].text
                 for paragraph_id in paragraph_ids
             ]
         )
@@ -112,13 +112,17 @@ class RAGPipeline:
             raise RuntimeError("Document embeddings must form a two-dimensional matrix.")
         if self.config.embedding.normalize:
             matrix = _normalize_embedding_rows(matrix)
-        self._paragraph_embeddings = ParagraphEmbeddingStore(
+        paragraph_embeddings = ParagraphEmbeddingStore(
             paragraph_ids=paragraph_ids,
             matrix=matrix,
             provider_name=self._embedding_provider.provider_name,
             model_name=self._embedding_provider.model_name,
             normalized=self.config.embedding.normalize,
         )
+        self._label_generator = label_generator
+        self._fit_result = result
+        self._corpus_index = corpus_index
+        self._paragraph_embeddings = paragraph_embeddings
         return self
 
     def get_paragraph(self, paragraph_id: str) -> IndexedParagraph | None:
@@ -488,6 +492,10 @@ class RAGPipeline:
                 pipeline.config.embedding.normalize,
             )
         _validate_paragraph_embeddings(pipeline._paragraph_embeddings, pipeline._corpus_index)
+        _validate_embedding_provider_compatibility(
+            pipeline._paragraph_embeddings,
+            pipeline._embedding_provider,
+        )
         return pipeline
 
     def _require_fitted(self) -> None:
@@ -654,6 +662,26 @@ def _validate_paragraph_embeddings(
     if store.matrix.shape[0] != len(store.paragraph_ids):
         raise RuntimeError(
             "Stored paragraph embeddings row count does not match stored paragraph IDs."
+        )
+
+
+def _validate_embedding_provider_compatibility(
+    store: ParagraphEmbeddingStore,
+    embedding_provider: EmbeddingProvider | None,
+) -> None:
+    """Validate that query embeddings come from the same embedding space as stored vectors."""
+
+    if embedding_provider is None:
+        return
+    if store.provider_name != embedding_provider.provider_name:
+        raise RuntimeError(
+            "Stored paragraph embeddings were built with a different embedding provider "
+            f"({store.provider_name!r} != {embedding_provider.provider_name!r})."
+        )
+    if store.model_name != embedding_provider.model_name:
+        raise RuntimeError(
+            "Stored paragraph embeddings were built with a different embedding model "
+            f"({store.model_name!r} != {embedding_provider.model_name!r})."
         )
 
 

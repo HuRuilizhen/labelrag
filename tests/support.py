@@ -43,3 +43,27 @@ class StubEmbeddingProvider:
             1.0 if "developer" in lowered or "developers" in lowered else 0.0,
             1.0 if "production" in lowered or "system" in lowered or "systems" in lowered else 0.0,
         ]
+
+
+class FailingEmbeddingProvider(StubEmbeddingProvider):
+    """Embedding provider that fails during document embedding."""
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        del texts
+        raise RuntimeError("simulated embedding failure")
+
+
+class AlternateStubEmbeddingProvider(StubEmbeddingProvider):
+    """Deterministic provider with a different identity for compatibility checks."""
+
+    @property
+    def provider_name(self) -> str:
+        """Return a distinct provider family name."""
+
+        return "alternate-stub"
+
+    @property
+    def model_name(self) -> str:
+        """Return a distinct provider model name."""
+
+        return "alternate-stub-model"
