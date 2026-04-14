@@ -258,6 +258,18 @@ class RAGPipeline:
             if not self.config.retrieval.allow_label_free_fallback:
                 return [], False, "no_retrieval"
             strategy = self.config.retrieval.label_free_fallback_strategy
+            supported_strategies = {
+                "concept_overlap_only",
+                "concept_overlap_semantic_rerank",
+                "semantic_only",
+            }
+            if strategy not in supported_strategies:
+                raise RuntimeError(
+                    "Unsupported label-free fallback strategy "
+                    f"{strategy!r}. Supported strategies: "
+                    "'concept_overlap_only', 'concept_overlap_semantic_rerank', "
+                    "'semantic_only'."
+                )
             if strategy == "concept_overlap_only":
                 return (
                     select_concept_overlap_fallback(
@@ -299,11 +311,6 @@ class RAGPipeline:
                     True,
                     "semantic_only_fallback",
                 )
-            raise RuntimeError(
-                "Unsupported label-free fallback strategy "
-                f"{strategy!r}. Supported strategies: 'concept_overlap_only', "
-                "'concept_overlap_semantic_rerank', 'semantic_only'."
-            )
 
         semantic_similarity_by_paragraph = self._semantic_similarity_lookup(
             question=query_analysis.query_text

@@ -181,6 +181,28 @@ def test_build_context_short_circuits_semantic_overlap_fallback_without_concepts
     assert result.metadata["semantic_reranking_enabled"] is False
 
 
+def test_build_context_rejects_invalid_fallback_strategy_before_semantic_lookup() -> None:
+    """Invalid fallback strategies should fail before any semantic lookup is attempted."""
+
+    class QueryFailingEmbeddingProvider(StubEmbeddingProvider):
+        def embed_query(self, text: str) -> list[float]:
+            del text
+            raise RuntimeError("query embedding should not run")
+
+    config = RAGPipelineConfig()
+    config.retrieval.label_free_fallback_strategy = "not-a-real-strategy"
+    pipeline = RAGPipeline(config, embedding_provider=QueryFailingEmbeddingProvider())
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="Unsupported label-free fallback strategy"):
+        pipeline.build_context("Quantum batteries improve starship reactors.")
+
+
 def test_build_context_can_disable_label_free_fallback() -> None:
     """Label-free fallback should be configurable."""
 
