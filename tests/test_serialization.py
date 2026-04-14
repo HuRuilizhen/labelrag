@@ -8,8 +8,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from labelrag import RAGPipeline, RAGPipelineConfig
+from labelrag import EmbeddingConfig, RAGPipeline, RAGPipelineConfig
 from labelrag.generation.generator import GeneratedAnswer
+from labelrag.io.serialize import pipeline_config_from_dict
 from labelrag.pipeline import rag_pipeline as rag_pipeline_module
 from support import StubEmbeddingProvider
 
@@ -280,6 +281,20 @@ def test_load_supports_legacy_snapshot_without_manifest(tmp_path: Path) -> None:
 
     assert result.prompt_context
     assert loaded.fit_result == pipeline.fit_result
+
+
+def test_pipeline_config_from_dict_defaults_missing_embedding_config() -> None:
+    """Legacy configs without an embedding block should use the default embedding config."""
+
+    config = pipeline_config_from_dict(
+        {
+            "labelgen": {},
+            "retrieval": {},
+            "prompt": {},
+        }
+    )
+
+    assert config.embedding == EmbeddingConfig()
 
 
 def test_load_rebuilds_legacy_concept_reverse_lookups(tmp_path: Path) -> None:

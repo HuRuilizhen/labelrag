@@ -196,6 +196,7 @@ def ensure_persistence_artifacts_exist(
     format: PersistenceFormat,
     *,
     include_manifest: bool = True,
+    include_embedding_artifact: bool = True,
 ) -> None:
     """Validate that all required artifacts exist for the chosen format."""
 
@@ -206,11 +207,12 @@ def ensure_persistence_artifacts_exist(
         for stem in stems
         if not (path := persistence_path(source, stem, format)).is_file()
     ]
-    missing_paths.extend(
-        artifact_name
-        for artifact_name in _EXTRA_ARTIFACTS
-        if not (source / artifact_name).is_file()
-    )
+    if include_embedding_artifact:
+        missing_paths.extend(
+            artifact_name
+            for artifact_name in _EXTRA_ARTIFACTS
+            if not (source / artifact_name).is_file()
+        )
     if missing_paths:
         missing = ", ".join(missing_paths)
         raise RuntimeError(
@@ -313,7 +315,12 @@ def pipeline_config_to_dict(config: RAGPipelineConfig) -> dict[str, Any]:
 def pipeline_config_from_dict(data: dict[str, Any]) -> RAGPipelineConfig:
     """Reconstruct a pipeline config from serialized data."""
 
-    embedding_data = _as_string_key_dict(data.get("embedding"))
+    embedding_value = data.get("embedding")
+    embedding_data = (
+        _as_string_key_dict(embedding_value)
+        if embedding_value is not None
+        else asdict(EmbeddingConfig())
+    )
     retrieval_data = _as_string_key_dict(data.get("retrieval"))
     prompt_data = _as_string_key_dict(data.get("prompt"))
     return RAGPipelineConfig(
