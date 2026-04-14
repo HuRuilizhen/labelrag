@@ -138,6 +138,94 @@ def select_concept_overlap_fallback(
     return ranked[:max_paragraphs]
 
 
+def select_concept_overlap_semantic_fallback(
+    query_analysis: QueryAnalysis,
+    corpus_index: CorpusIndex,
+    *,
+    max_paragraphs: int,
+    semantic_similarity_for_paragraph: Callable[[str], float],
+) -> list[RetrievedParagraph]:
+    """Select concept-overlap fallback candidates with semantic reranking."""
+
+    query_concept_ids = set(query_analysis.concept_ids)
+    candidates: list[RetrievedParagraph] = []
+    for paragraph in corpus_index.paragraphs_by_id.values():
+        matched_concept_ids = sorted(set(paragraph.concept_ids) & query_concept_ids)
+        if not matched_concept_ids:
+            continue
+        semantic_similarity = semantic_similarity_for_paragraph(paragraph.paragraph_id)
+        candidates.append(
+            RetrievedParagraph(
+                paragraph_id=paragraph.paragraph_id,
+                text=paragraph.text,
+                metadata=paragraph.metadata,
+                newly_covered_label_ids=[],
+                already_covered_label_ids=[],
+                matched_label_ids=[],
+                matched_concept_ids=matched_concept_ids,
+                paragraph_label_ids=list(paragraph.label_ids),
+                paragraph_concept_ids=list(paragraph.concept_ids),
+                concept_overlap_count=len(matched_concept_ids),
+                marginal_gain=0,
+                semantic_similarity=semantic_similarity,
+                retrieval_score=float(len(matched_concept_ids)),
+            )
+        )
+
+    ranked = sorted(
+        candidates,
+        key=lambda item: (
+            -item.concept_overlap_count,
+            -(item.semantic_similarity or 0.0),
+            -len(item.paragraph_label_ids),
+            item.paragraph_id,
+        ),
+    )
+    return ranked[:max_paragraphs]
+
+
+def select_semantic_only_fallback(
+    query_analysis: QueryAnalysis,
+    corpus_index: CorpusIndex,
+    *,
+    max_paragraphs: int,
+    semantic_similarity_for_paragraph: Callable[[str], float],
+) -> list[RetrievedParagraph]:
+    """Select top-k paragraphs directly by semantic similarity for fallback."""
+
+    del query_analysis
+    candidates: list[RetrievedParagraph] = []
+    for paragraph in corpus_index.paragraphs_by_id.values():
+        semantic_similarity = semantic_similarity_for_paragraph(paragraph.paragraph_id)
+        candidates.append(
+            RetrievedParagraph(
+                paragraph_id=paragraph.paragraph_id,
+                text=paragraph.text,
+                metadata=paragraph.metadata,
+                newly_covered_label_ids=[],
+                already_covered_label_ids=[],
+                matched_label_ids=[],
+                matched_concept_ids=[],
+                paragraph_label_ids=list(paragraph.label_ids),
+                paragraph_concept_ids=list(paragraph.concept_ids),
+                concept_overlap_count=0,
+                marginal_gain=0,
+                semantic_similarity=semantic_similarity,
+                retrieval_score=float(semantic_similarity),
+            )
+        )
+
+    ranked = sorted(
+        candidates,
+        key=lambda item: (
+            -(item.semantic_similarity or 0.0),
+            -len(item.paragraph_label_ids),
+            item.paragraph_id,
+        ),
+    )
+    return ranked[:max_paragraphs]
+
+
 def _reverse_lexicographic_key(value: str) -> str:
     """Invert lexicographic order so smaller IDs sort earlier in max comparisons."""
 
