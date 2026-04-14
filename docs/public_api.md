@@ -8,7 +8,7 @@ concept extraction, community detection, and label assignment.
 
 Current dependency target:
 
-- `paralabelgen==0.2.0`
+- `paralabelgen==0.2.2`
 
 ## Package Entry Point
 
@@ -17,9 +17,11 @@ Recommended import style:
 ```python
 from labelrag import (
     ConceptRecord,
+    EmbeddingConfig,
     GeneratedAnswer,
     IndexedParagraph,
     LabelRecord,
+    EmbeddingProvider,
     OpenAICompatibleAnswerGenerator,
     OpenAICompatibleConfig,
     PromptConfig,
@@ -30,6 +32,7 @@ from labelrag import (
     RetrievalConfig,
     RetrievalResult,
     RetrievedParagraph,
+    SentenceTransformerEmbeddingProvider,
 )
 ```
 
@@ -52,6 +55,7 @@ Constructor:
 RAGPipeline(
     config: RAGPipelineConfig | None = None,
     generator: AnswerGenerator | None = None,
+    embedding_provider: EmbeddingProvider | None = None,
 )
 ```
 
@@ -59,6 +63,8 @@ Behavior:
 
 - `config` defaults to `RAGPipelineConfig()`
 - `generator` is optional
+- `embedding_provider` defaults to the provider implied by
+  `RAGPipelineConfig.embedding`
 - when no generator is configured, `answer(...)` may return an empty
   `answer_text`
 
@@ -79,6 +85,14 @@ Accepted inputs:
 - `list[str]`
 - `list[labelgen.Paragraph]`
 
+Embedding behavior:
+
+- `fit(...)` requires an embedding provider
+- paragraph embeddings are built during `fit(...)`
+- missing or unavailable embedding providers should raise a clear runtime error
+- the first shipped concrete embedding implementation is
+  `SentenceTransformerEmbeddingProvider`
+
 Current update boundary:
 
 - `fit(...)` is batch-only
@@ -86,6 +100,13 @@ Current update boundary:
 - adding new paragraphs currently requires a full refit
 - `save(...)` and `load(...)` restore a static fitted state rather than an
   incrementally updateable corpus state
+
+Extraction boundary:
+
+- `labelrag` remains extractor-agnostic and passes extraction configuration
+  through `LabelGeneratorConfig`
+- for `0.1.0`, the primary supported and validated extraction path is the
+  `paralabelgen==0.2.2` LLM concept-extraction pipeline
 
 #### `build_context`
 
@@ -188,6 +209,7 @@ Behavior:
 - the current release supports whole-snapshot persistence in either:
   - `json`
   - `json.gz`
+- paragraph embeddings are stored separately in `paragraph_embeddings.npz`
 - mixed compressed and uncompressed artifact layouts are out of scope
 - snapshots written by the current release include a lightweight manifest
   artifact:
@@ -211,8 +233,12 @@ Behavior:
 - when `format` is explicit, the loader does not guess and requires the chosen
   format to exist completely
 - snapshots written by the current release are expected to include a manifest
-- loading pre-`0.0.2` snapshots without a manifest remains supported on a
-  best-effort basis
+- loading pre-embedding snapshots remains supported on a best-effort basis
+- if a legacy snapshot predates `paragraph_embeddings.npz`, `load(...)` may
+  rebuild paragraph embeddings from persisted paragraph texts when an embedding
+  provider is available
+- if a legacy snapshot predates `paragraph_embeddings.npz` and no embedding
+  provider is available, `load(...)` should fail explicitly
 - when legacy snapshots are missing derived concept inspection tables, the
   loader may rebuild them from stored paragraph-side concept assignments
 
@@ -269,6 +295,7 @@ Field meaning:
 @dataclass(slots=True)
 class RAGPipelineConfig:
     labelgen: LabelGeneratorConfig = field(default_factory=LabelGeneratorConfig)
+    embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
     prompt: PromptConfig = field(default_factory=PromptConfig)
 ```
@@ -277,6 +304,25 @@ Boundary rule:
 
 - `labelrag` may configure `LabelGeneratorConfig`
 - `labelrag` should not patch `labelgen` internals directly
+
+### `EmbeddingConfig`
+
+```python
+@dataclass(slots=True)
+class EmbeddingConfig:
+    provider: str = "sentence-transformers"
+    model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    dimensions: int | None = None
+    normalize: bool = True
+```
+
+Field meaning:
+
+- `provider`: embedding provider family identifier
+- `model`: embedding model identifier understood by the chosen provider
+- `dimensions`: optional explicit vector size hint
+- `normalize`: whether stored paragraph/query embeddings should be normalized
+  for cosine-style similarity
 
 ## Data Models
 
@@ -365,6 +411,7 @@ class RetrievedParagraph:
     paragraph_concept_ids: list[str]
     concept_overlap_count: int
     marginal_gain: int
+    semantic_similarity: float | None
     retrieval_score: float
 ```
 
@@ -378,6 +425,8 @@ Meaning:
   covered by earlier retrieved paragraphs
 - `concept_overlap_count` records the number of overlapping query concept IDs
   used in tie-break decisions
+- `semantic_similarity` records the query-to-paragraph cosine similarity used
+  as the secondary greedy ranking signal when semantic reranking executes
 
 ### `RetrievalResult`
 
@@ -406,6 +455,9 @@ Recommended additional metadata keys:
 
 - `query_label_ids`
 - `retrieval_limit`
+- `embedding_provider`
+- `embedding_model`
+- `semantic_reranking_enabled`
 
 ### `GeneratedAnswer`
 
@@ -450,7 +502,48 @@ Recommended additional metadata keys:
 
 - `query_label_ids`
 - `retrieval_limit`
+- `embedding_provider`
+- `embedding_model`
+- `semantic_reranking_enabled`
 - `generation_metadata`
+
+## Embedding Protocol
+
+`labelrag` should define an embedding abstraction rather than bind the pipeline
+to one concrete runtime.
+
+```python
+class EmbeddingProvider(Protocol):
+    @property
+    def provider_name(self) -> str: ...
+    @property
+    def model_name(self) -> str: ...
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]: ...
+    def embed_query(self, text: str) -> list[float]: ...
+```
+
+Behavior:
+
+- `embed_documents(...)` returns one vector per paragraph text in input order
+- `embed_query(...)` returns one vector for the query text
+- document/query vectors must be compatible for cosine-style similarity
+
+### `SentenceTransformerEmbeddingProvider`
+
+```python
+class SentenceTransformerEmbeddingProvider:
+    def __init__(self, config: EmbeddingConfig) -> None: ...
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]: ...
+    def embed_query(self, text: str) -> list[float]: ...
+```
+
+Behavior:
+
+- this is the first shipped concrete embedding provider
+- it uses the local `sentence-transformers` runtime
+- the model may be downloaded on first use if it is not already cached
+- if the package dependency or model is unavailable, runtime errors should make
+  the dependency/model issue explicit
 
 ## Built-In Provider Adapter
 
