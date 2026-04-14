@@ -6,6 +6,7 @@ import pytest
 from labelgen import Paragraph
 
 from labelrag import RAGPipeline, RAGPipelineConfig
+from labelrag.pipeline import rag_pipeline as rag_pipeline_module
 from support import FailingEmbeddingProvider, StubEmbeddingProvider
 
 
@@ -129,14 +130,46 @@ def test_fit_builds_label_and_concept_lookup_tables() -> None:
 
 
 def test_fit_requires_embedding_provider() -> None:
-    """Fitting should fail clearly when no embedding provider is available."""
+    """Unsupported configured providers should fail clearly during construction."""
 
     config = RAGPipelineConfig()
     config.embedding.provider = "unsupported-provider"
-    pipeline = RAGPipeline(config)
 
-    with pytest.raises(RuntimeError, match="embedding provider"):
-        pipeline.fit(["OpenAI builds language models for developers."])
+    with pytest.raises(RuntimeError, match="Unsupported embedding provider"):
+        RAGPipeline(config)
+
+
+def test_fit_uses_default_provider_construction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pipelines should fit successfully with the config-driven default provider."""
+
+    def build_stub_provider(_: object) -> StubEmbeddingProvider:
+        return StubEmbeddingProvider()
+
+    monkeypatch.setattr(
+        rag_pipeline_module,
+        "SentenceTransformerEmbeddingProvider",
+        build_stub_provider,
+    )
+    pipeline = RAGPipeline(RAGPipelineConfig())
+
+    pipeline.fit(["OpenAI builds language models for developers."])
+
+    assert pipeline.fit_result is not None
+    assert pipeline.corpus_index is not None
+
+
+def test_explicit_embedding_provider_overrides_configured_provider() -> None:
+    """Explicit provider injection should override configured provider resolution."""
+
+    config = RAGPipelineConfig()
+    config.embedding.provider = "unsupported-provider"
+    pipeline = RAGPipeline(config, embedding_provider=StubEmbeddingProvider())
+
+    pipeline.fit(["OpenAI builds language models for developers."])
+
+    assert pipeline.fit_result is not None
 
 
 def test_fit_does_not_leave_partial_state_after_embedding_failure() -> None:
