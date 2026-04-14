@@ -268,6 +268,8 @@ class RAGPipeline:
                     False,
                     "concept_overlap_only_fallback",
                 )
+            if strategy == "concept_overlap_semantic_rerank" and not query_analysis.concept_ids:
+                return [], False, "concept_overlap_semantic_fallback"
             semantic_similarity_by_paragraph = self._semantic_similarity_lookup(
                 question=query_analysis.query_text
             )

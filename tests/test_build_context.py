@@ -105,7 +105,7 @@ def test_build_context_uses_default_label_free_fallback_strategy() -> None:
     assert result.metadata["uncovered_label_ids"] == []
     assert result.metadata["attempted_covered_label_ids"] == []
     assert result.metadata["attempted_uncovered_label_ids"] == []
-    assert result.metadata["semantic_reranking_enabled"] is True
+    assert result.metadata["semantic_reranking_enabled"] is False
 
 
 def test_build_context_supports_concept_overlap_only_fallback() -> None:
@@ -157,6 +157,28 @@ def test_build_context_supports_semantic_only_fallback() -> None:
     assert result.metadata["retrieval_strategy"] == "semantic_only_fallback"
     assert result.metadata["semantic_reranking_enabled"] is True
     assert len(result.retrieved_paragraphs) == 2
+
+
+def test_build_context_short_circuits_semantic_overlap_fallback_without_concepts() -> None:
+    """Concept-overlap semantic fallback should return early when the query has no concepts."""
+
+    pipeline = RAGPipeline(
+        RAGPipelineConfig(),
+        embedding_provider=StubEmbeddingProvider(),
+    )
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+        ]
+    )
+
+    result = pipeline.build_context("???")
+
+    assert result.retrieved_paragraphs == []
+    assert result.metadata["used_label_free_fallback"] is True
+    assert result.metadata["retrieval_strategy"] == "concept_overlap_semantic_fallback"
+    assert result.metadata["semantic_reranking_enabled"] is False
 
 
 def test_build_context_can_disable_label_free_fallback() -> None:
