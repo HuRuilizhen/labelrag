@@ -5,8 +5,9 @@ pipelines built on top of `paralabelgen`.
 
 - PyPI distribution: `labelrag`
 - Python import package: `labelrag`
-- Core dependency target: `paralabelgen==0.2.0`
-- Default extraction path: spaCy via `paralabelgen`
+- Core dependency target: `paralabelgen==0.2.2`
+- Primary supported extraction path: `paralabelgen` LLM concept extraction
+- First semantic-reranking embedding provider: `sentence-transformers`
 
 ## Install
 
@@ -14,23 +15,31 @@ pipelines built on top of `paralabelgen`.
 pip install labelrag
 ```
 
-If you want to use the default spaCy-backed labeling path, install a compatible
+If you want to use the spaCy-backed extraction path, install a compatible
 English pipeline such as:
 
 ```bash
 python -m spacy download en_core_web_sm
 ```
 
-`en_core_web_sm` is the recommended default model, but you can point the
-underlying `LabelGeneratorConfig` at another installed compatible spaCy
-pipeline.
+`en_core_web_sm` is a convenient local option, but `0.1.0` release validation
+targets the `paralabelgen==0.2.2` LLM concept-extraction pipeline as the
+primary supported extraction path.
+
+The first shipped semantic-reranking provider uses `sentence-transformers`.
+Its model weights may be downloaded on first use if they are not already cached
+locally.
 
 ## Quick Start
 
 ### Retrieval-only workflow
 
 ```python
-from labelrag import RAGPipeline, RAGPipelineConfig
+from labelrag import (
+    RAGPipeline,
+    RAGPipelineConfig,
+    SentenceTransformerEmbeddingProvider,
+)
 
 paragraphs = [
     "OpenAI builds language models for developers.",
@@ -38,7 +47,14 @@ paragraphs = [
     "Production systems need monitoring and evaluation tooling.",
 ]
 
-pipeline = RAGPipeline(RAGPipelineConfig())
+config = RAGPipelineConfig()
+config.labelgen.extractor_mode = "heuristic"
+config.labelgen.use_graph_community_detection = False
+
+pipeline = RAGPipeline(
+    config,
+    embedding_provider=SentenceTransformerEmbeddingProvider(config.embedding),
+)
 pipeline.fit(paragraphs)
 
 retrieval = pipeline.build_context("How do developers use language models?")
@@ -54,6 +70,7 @@ from labelrag import (
     OpenAICompatibleConfig,
     RAGPipeline,
     RAGPipelineConfig,
+    SentenceTransformerEmbeddingProvider,
 )
 
 paragraphs = [
@@ -62,7 +79,14 @@ paragraphs = [
     "Production systems need monitoring and evaluation tooling.",
 ]
 
-pipeline = RAGPipeline(RAGPipelineConfig())
+config = RAGPipelineConfig()
+config.labelgen.extractor_mode = "heuristic"
+config.labelgen.use_graph_community_detection = False
+
+pipeline = RAGPipeline(
+    config,
+    embedding_provider=SentenceTransformerEmbeddingProvider(config.embedding),
+)
 pipeline.fit(paragraphs)
 
 generator = OpenAICompatibleAnswerGenerator(
@@ -83,21 +107,29 @@ print(answer.metadata)
 
 ## Retrieval Model
 
-The current retrieval layer is deterministic and label-driven.
+The current retrieval layer is deterministic and still label-driven at the
+candidate-generation stage.
 
 - `fit(...)` delegates paragraph analysis to `labelgen.LabelGenerator`
+- `fit(...)` also builds paragraph embeddings
 - `build_context(...)` maps the question into the fitted label space
 - retrieval uses greedy coverage over query label IDs
+- semantic similarity is used as a secondary ranking signal inside greedy
+  selection
 - label-free queries can fall back to deterministic concept overlap
 - `require_full_label_coverage=True` suppresses partial retrieval results while
   preserving attempted coverage trace in metadata
 
-Tie-break order for greedy retrieval is:
+Greedy selection order is:
 
 1. larger overlap with remaining query labels
-2. larger overlap on query concept IDs
-3. larger total paragraph label count
-4. lexicographically smaller `paragraph_id`
+2. larger semantic similarity
+3. larger overlap on query concept IDs
+4. larger total paragraph label count
+5. lexicographically smaller `paragraph_id`
+
+`0.1.0` does not change label-free fallback. Queries without labels still use
+the existing concept-overlap fallback path when enabled.
 
 ## OpenAI-Compatible Provider Notes
 
@@ -147,6 +179,24 @@ Lower-level ID-oriented helpers remain available when you only need stable IDs:
 
 Detailed API notes are available in [`docs/public_api.md`](docs/public_api.md).
 
+## Embedding Notes
+
+- `RAGPipeline.fit(...)` now requires an embedding provider
+- the first shipped provider is `SentenceTransformerEmbeddingProvider`
+- the default model is `sentence-transformers/all-MiniLM-L6-v2`
+- the model may be downloaded on first use
+- offline environments should pre-cache the embedding model before running
+  `fit(...)`
+
+Common runtime failures:
+
+- missing `sentence-transformers` package:
+  - reinstall project dependencies, for example `pip install -e .`
+- model load/download failure:
+  - verify the configured model name
+  - ensure the model is already cached locally or that the environment can
+    reach Hugging Face
+
 ## Examples
 
 Runnable examples are available in [`examples/`](examples/):
@@ -154,8 +204,15 @@ Runnable examples are available in [`examples/`](examples/):
 - [`examples/basic_usage.py`](examples/basic_usage.py)
 - [`examples/custom_config.py`](examples/custom_config.py)
 - [`examples/inspection_api.py`](examples/inspection_api.py)
+- [`examples/semantic_rerank.py`](examples/semantic_rerank.py)
 - [`examples/save_and_load.py`](examples/save_and_load.py)
 - [`examples/provider_answer.py`](examples/provider_answer.py)
+
+Example note:
+
+- the runnable example scripts use a tiny local demo embedding provider so they
+  stay runnable offline
+- production usage should prefer `SentenceTransformerEmbeddingProvider`
 
 ## Persistence Notes
 
@@ -166,6 +223,7 @@ Runnable examples are available in [`examples/`](examples/):
 - `label_generator.json`
 - `corpus_index.json`
 - `fit_result.json`
+- `paragraph_embeddings.npz`
 
 The persistence layer now supports:
 
@@ -192,9 +250,12 @@ Current update boundary:
 
 Legacy snapshot note:
 
-- loading pre-`0.0.2` snapshots remains a best-effort compatibility path
+- loading pre-embedding snapshots remains a best-effort compatibility path
 - when older snapshots are missing derived concept inspection tables, `load()`
   may rebuild them from paragraph-side concept data that is still present
+- when older snapshots predate `paragraph_embeddings.npz`, `load()` may rebuild
+  paragraph embeddings from persisted paragraph texts if an embedding provider
+  is available
 - persisted manifests include a non-empty `labelrag_version`
 - `save()` fails explicitly if the current package version cannot be determined
   for manifest writing
