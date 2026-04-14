@@ -65,6 +65,10 @@ Behavior:
 - `generator` is optional
 - `embedding_provider` defaults to the provider implied by
   `RAGPipelineConfig.embedding`
+- `RAGPipeline(config)` is the primary construction path for the default
+  embedding-enabled workflow
+- `embedding_provider=` remains available as an explicit override for tests and
+  advanced integrations
 - when no generator is configured, `answer(...)` may return an empty
   `answer_text`
 
@@ -262,6 +266,7 @@ class RetrievalConfig:
     max_paragraphs: int = 8
     require_full_label_coverage: bool = False
     allow_label_free_fallback: bool = True
+    label_free_fallback_strategy: str = "concept_overlap_semantic_rerank"
 ```
 
 Field meaning:
@@ -271,6 +276,19 @@ Field meaning:
   retrieval more strictly if not all query labels are covered
 - `allow_label_free_fallback`: whether a query with no assigned labels may still
   return a fallback retrieval result
+- `label_free_fallback_strategy`: which retrieval policy to use for no-label
+  fallback when fallback is enabled
+
+Supported fallback strategies:
+
+- `concept_overlap_only`
+  - preserves concept-overlap fallback without semantic reranking
+- `concept_overlap_semantic_rerank`
+  - uses concept-overlap candidates and semantic similarity as a secondary
+    ranking signal
+- `semantic_only`
+  - uses semantic similarity directly over the full fitted paragraph set for
+    no-label fallback
 
 ### `PromptConfig`
 
@@ -455,6 +473,7 @@ Recommended additional metadata keys:
 
 - `query_label_ids`
 - `retrieval_limit`
+- `label_free_fallback_strategy`
 - `embedding_provider`
 - `embedding_model`
 - `semantic_reranking_enabled`
@@ -502,6 +521,7 @@ Recommended additional metadata keys:
 
 - `query_label_ids`
 - `retrieval_limit`
+- `label_free_fallback_strategy`
 - `embedding_provider`
 - `embedding_model`
 - `semantic_reranking_enabled`
@@ -636,6 +656,26 @@ Termination conditions:
 
 These retrieval rules are observable behavior and should be tested as part of
 the public contract.
+
+Label-free fallback strategies:
+
+- `concept_overlap_only`
+  - rank only by concept overlap, then paragraph label count, then
+    `paragraph_id`
+- `concept_overlap_semantic_rerank`
+  - form candidates from concept overlap, then use semantic similarity as a
+    secondary ranking signal
+- `semantic_only`
+  - compute semantic similarity against the full fitted paragraph set and
+    return top-k fallback paragraphs directly
+
+Expected retrieval strategy values currently include:
+
+- `greedy_label_coverage_semantic_rerank`
+- `concept_overlap_only_fallback`
+- `concept_overlap_semantic_fallback`
+- `semantic_only_fallback`
+- `no_retrieval`
 
 ## Prompt Rendering
 
