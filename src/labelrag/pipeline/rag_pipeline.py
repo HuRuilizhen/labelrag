@@ -42,9 +42,11 @@ from labelrag.io.serialize import (
     validate_manifest,
 )
 from labelrag.retrieval.selector import (
+    select_concept_gate_semantic_fallback,
     select_concept_overlap_fallback,
     select_concept_overlap_semantic_fallback,
     select_greedy_paragraphs,
+    select_label_gate_semantic_paragraphs,
     select_semantic_only_fallback,
 )
 from labelrag.types import (
@@ -261,6 +263,7 @@ class RAGPipeline:
             supported_strategies = {
                 "concept_overlap_only",
                 "concept_overlap_semantic_rerank",
+                "concept_gate_semantic_rank",
                 "semantic_only",
             }
             if strategy not in supported_strategies:
@@ -268,7 +271,7 @@ class RAGPipeline:
                     "Unsupported label-free fallback strategy "
                     f"{strategy!r}. Supported strategies: "
                     "'concept_overlap_only', 'concept_overlap_semantic_rerank', "
-                    "'semantic_only'."
+                    "'concept_gate_semantic_rank', 'semantic_only'."
                 )
             if strategy == "concept_overlap_only":
                 return (
@@ -280,12 +283,17 @@ class RAGPipeline:
                     False,
                     "concept_overlap_only_fallback",
                 )
-            if strategy == "concept_overlap_semantic_rerank" and not query_analysis.concept_ids:
+            if (
+                strategy in {"concept_overlap_semantic_rerank", "concept_gate_semantic_rank"}
+                and not query_analysis.concept_ids
+            ):
+                if strategy == "concept_gate_semantic_rank":
+                    return [], False, "concept_gate_semantic_fallback"
                 return [], False, "concept_overlap_semantic_fallback"
             semantic_similarity_by_paragraph = self._semantic_similarity_lookup(
                 question=query_analysis.query_text
             )
-            
+
             def semantic_similarity_for_paragraph(paragraph_id: str) -> float:
                 return semantic_similarity_by_paragraph[paragraph_id]
 
@@ -300,6 +308,17 @@ class RAGPipeline:
                     True,
                     "concept_overlap_semantic_fallback",
                 )
+            if strategy == "concept_gate_semantic_rank":
+                return (
+                    select_concept_gate_semantic_fallback(
+                        query_analysis,
+                        self._corpus_index,
+                        max_paragraphs=self.config.retrieval.max_paragraphs,
+                        semantic_similarity_for_paragraph=semantic_similarity_for_paragraph,
+                    ),
+                    True,
+                    "concept_gate_semantic_fallback",
+                )
             if strategy == "semantic_only":
                 return (
                     select_semantic_only_fallback(
@@ -312,21 +331,47 @@ class RAGPipeline:
                     "semantic_only_fallback",
                 )
 
+        strategy = self.config.retrieval.retrieval_strategy
+        supported_strategies = {
+            "greedy_label_coverage_semantic_rerank",
+            "label_gate_semantic_rank",
+        }
+        if strategy not in supported_strategies:
+            raise RuntimeError(
+                "Unsupported retrieval strategy "
+                f"{strategy!r}. Supported strategies: "
+                "'greedy_label_coverage_semantic_rerank', 'label_gate_semantic_rank'."
+            )
         semantic_similarity_by_paragraph = self._semantic_similarity_lookup(
             question=query_analysis.query_text
         )
-        return (
-            select_greedy_paragraphs(
-                query_analysis,
-                self._corpus_index,
-                max_paragraphs=self.config.retrieval.max_paragraphs,
-                semantic_similarity_for_paragraph=(
-                    lambda paragraph_id: semantic_similarity_by_paragraph[paragraph_id]
+        if strategy == "greedy_label_coverage_semantic_rerank":
+            return (
+                select_greedy_paragraphs(
+                    query_analysis,
+                    self._corpus_index,
+                    max_paragraphs=self.config.retrieval.max_paragraphs,
+                    semantic_similarity_for_paragraph=(
+                        lambda paragraph_id: semantic_similarity_by_paragraph[paragraph_id]
+                    ),
                 ),
-            ),
-            True,
-            "greedy_label_coverage_semantic_rerank",
-        )
+                True,
+                "greedy_label_coverage_semantic_rerank",
+            )
+        if strategy == "label_gate_semantic_rank":
+            return (
+                select_label_gate_semantic_paragraphs(
+                    query_analysis,
+                    self._corpus_index,
+                    max_paragraphs=self.config.retrieval.max_paragraphs,
+                    semantic_similarity_for_paragraph=(
+                        lambda paragraph_id: semantic_similarity_by_paragraph[paragraph_id]
+                    ),
+                ),
+                True,
+                "label_gate_semantic_rank",
+            )
+        raise AssertionError("Validated retrieval strategy should have matched a branch.")
 
     def build_context(self, question: str) -> RetrievalResult:
         """Build retrieval context for a question."""

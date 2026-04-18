@@ -23,6 +23,7 @@ class RetrievalConfig:
     require_full_label_coverage: bool = False
     allow_label_free_fallback: bool = True
     label_free_fallback_strategy: str = "concept_overlap_semantic_rerank"
+    retrieval_strategy: str = "greedy_label_coverage_semantic_rerank"
 
 
 @dataclass(slots=True)
