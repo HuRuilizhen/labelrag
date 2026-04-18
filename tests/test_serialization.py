@@ -338,6 +338,19 @@ def test_pipeline_config_from_dict_defaults_missing_embedding_config() -> None:
     assert config.retrieval.retrieval_strategy == "greedy_label_coverage_semantic_rerank"
 
 
+def test_retrieval_config_preserves_legacy_positional_constructor_behavior() -> None:
+    """Adding retrieval_strategy should not change existing positional argument mapping."""
+
+    config = RAGPipelineConfig()
+    config.retrieval = type(config.retrieval)(8, False, True, "semantic_only")
+
+    assert config.retrieval.max_paragraphs == 8
+    assert config.retrieval.require_full_label_coverage is False
+    assert config.retrieval.allow_label_free_fallback is True
+    assert config.retrieval.label_free_fallback_strategy == "semantic_only"
+    assert config.retrieval.retrieval_strategy == "greedy_label_coverage_semantic_rerank"
+
+
 def test_pipeline_config_from_dict_preserves_new_strategy_values() -> None:
     """Serialized configs should round-trip the new retrieval strategy values."""
 

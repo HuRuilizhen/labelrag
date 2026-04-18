@@ -287,6 +287,8 @@ class RAGPipeline:
                 strategy in {"concept_overlap_semantic_rerank", "concept_gate_semantic_rank"}
                 and not query_analysis.concept_ids
             ):
+                if strategy == "concept_gate_semantic_rank":
+                    return [], False, "concept_gate_semantic_fallback"
                 return [], False, "concept_overlap_semantic_fallback"
             semantic_similarity_by_paragraph = self._semantic_similarity_lookup(
                 question=query_analysis.query_text
@@ -329,10 +331,20 @@ class RAGPipeline:
                     "semantic_only_fallback",
                 )
 
+        strategy = self.config.retrieval.retrieval_strategy
+        supported_strategies = {
+            "greedy_label_coverage_semantic_rerank",
+            "label_gate_semantic_rank",
+        }
+        if strategy not in supported_strategies:
+            raise RuntimeError(
+                "Unsupported retrieval strategy "
+                f"{strategy!r}. Supported strategies: "
+                "'greedy_label_coverage_semantic_rerank', 'label_gate_semantic_rank'."
+            )
         semantic_similarity_by_paragraph = self._semantic_similarity_lookup(
             question=query_analysis.query_text
         )
-        strategy = self.config.retrieval.retrieval_strategy
         if strategy == "greedy_label_coverage_semantic_rerank":
             return (
                 select_greedy_paragraphs(
@@ -359,11 +371,7 @@ class RAGPipeline:
                 True,
                 "label_gate_semantic_rank",
             )
-        raise RuntimeError(
-            "Unsupported retrieval strategy "
-            f"{strategy!r}. Supported strategies: "
-            "'greedy_label_coverage_semantic_rerank', 'label_gate_semantic_rank'."
-        )
+        raise AssertionError("Validated retrieval strategy should have matched a branch.")
 
     def build_context(self, question: str) -> RetrievalResult:
         """Build retrieval context for a question."""

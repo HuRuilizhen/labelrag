@@ -104,6 +104,28 @@ def test_build_context_rejects_invalid_main_retrieval_strategy() -> None:
         pipeline.build_context("How do developers use language models?")
 
 
+def test_build_context_rejects_invalid_main_retrieval_strategy_before_query_embedding() -> None:
+    """Invalid main strategies should fail before semantic lookup runs."""
+
+    class QueryFailingEmbeddingProvider(StubEmbeddingProvider):
+        def embed_query(self, text: str) -> list[float]:
+            del text
+            raise RuntimeError("query embedding should not run")
+
+    config = RAGPipelineConfig()
+    config.retrieval.retrieval_strategy = "not-a-real-main-strategy"
+    pipeline = RAGPipeline(config, embedding_provider=QueryFailingEmbeddingProvider())
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="Unsupported retrieval strategy"):
+        pipeline.build_context("How do developers use language models?")
+
+
 def test_build_context_respects_prompt_configuration() -> None:
     """Context building should honor the prompt rendering configuration."""
 
@@ -237,6 +259,30 @@ def test_build_context_supports_concept_gate_semantic_rank_fallback() -> None:
     assert result.metadata["retrieval_strategy"] == "concept_gate_semantic_fallback"
     assert result.metadata["label_free_fallback_strategy"] == "concept_gate_semantic_rank"
     assert result.metadata["semantic_reranking_enabled"] is True
+
+
+def test_build_context_short_circuits_concept_gate_fallback_without_concepts() -> None:
+    """Concept-gate semantic fallback should preserve its own strategy label on short-circuit."""
+
+    config = RAGPipelineConfig()
+    config.retrieval.label_free_fallback_strategy = "concept_gate_semantic_rank"
+    pipeline = RAGPipeline(
+        config,
+        embedding_provider=StubEmbeddingProvider(),
+    )
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+        ]
+    )
+
+    result = pipeline.build_context("???")
+
+    assert result.retrieved_paragraphs == []
+    assert result.metadata["used_label_free_fallback"] is True
+    assert result.metadata["retrieval_strategy"] == "concept_gate_semantic_fallback"
+    assert result.metadata["semantic_reranking_enabled"] is False
 
 
 def test_build_context_short_circuits_semantic_overlap_fallback_without_concepts() -> None:
