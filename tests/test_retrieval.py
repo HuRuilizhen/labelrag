@@ -2,9 +2,11 @@
 
 from labelrag.indexing.corpus_index import CorpusIndex
 from labelrag.retrieval.selector import (
+    select_concept_gate_semantic_fallback,
     select_concept_overlap_fallback,
     select_concept_overlap_semantic_fallback,
     select_greedy_paragraphs,
+    select_label_gate_semantic_paragraphs,
     select_semantic_only_fallback,
 )
 from labelrag.types import IndexedParagraph, QueryAnalysis
@@ -114,6 +116,98 @@ def test_select_greedy_paragraphs_uses_semantic_similarity_as_tiebreak() -> None
     )
 
     assert [paragraph.paragraph_id for paragraph in selected] == ["p2"]
+
+
+def test_select_label_gate_semantic_paragraphs_uses_label_overlap_as_gate() -> None:
+    """Semantic-first label gating should exclude paragraphs without matching labels."""
+
+    corpus_index = CorpusIndex(
+        paragraphs_by_id={
+            "p1": IndexedParagraph(
+                paragraph_id="p1",
+                text="Paragraph 1",
+                metadata=None,
+                concept_ids=["c1"],
+                concept_texts=["developers"],
+                label_ids=["l1"],
+                label_display_names=["developers"],
+            ),
+            "p2": IndexedParagraph(
+                paragraph_id="p2",
+                text="Paragraph 2",
+                metadata=None,
+                concept_ids=["c2"],
+                concept_texts=["systems"],
+                label_ids=["l2"],
+                label_display_names=["systems"],
+            ),
+        }
+    )
+    query_analysis = QueryAnalysis(
+        query_text="How do developers work?",
+        concepts=["developers"],
+        concept_ids=["c1"],
+        label_ids=["l1"],
+        label_display_names=["developers"],
+    )
+
+    selected = select_label_gate_semantic_paragraphs(
+        query_analysis,
+        corpus_index,
+        max_paragraphs=2,
+        semantic_similarity_for_paragraph=lambda paragraph_id: {
+            "p1": 0.2,
+            "p2": 0.9,
+        }[paragraph_id],
+    )
+
+    assert [paragraph.paragraph_id for paragraph in selected] == ["p1"]
+
+
+def test_select_label_gate_semantic_paragraphs_prefers_similarity_before_gain() -> None:
+    """Semantic-first label gating should rank similarity before label gain."""
+
+    corpus_index = CorpusIndex(
+        paragraphs_by_id={
+            "p1": IndexedParagraph(
+                paragraph_id="p1",
+                text="Paragraph 1",
+                metadata=None,
+                concept_ids=["c1", "c2"],
+                concept_texts=["developers", "systems"],
+                label_ids=["l1", "l2"],
+                label_display_names=["developers", "systems"],
+            ),
+            "p2": IndexedParagraph(
+                paragraph_id="p2",
+                text="Paragraph 2",
+                metadata=None,
+                concept_ids=["c1"],
+                concept_texts=["developers"],
+                label_ids=["l1"],
+                label_display_names=["developers"],
+            ),
+        }
+    )
+    query_analysis = QueryAnalysis(
+        query_text="How do developers work?",
+        concepts=["developers"],
+        concept_ids=["c1"],
+        label_ids=["l1", "l2"],
+        label_display_names=["developers", "systems"],
+    )
+
+    selected = select_label_gate_semantic_paragraphs(
+        query_analysis,
+        corpus_index,
+        max_paragraphs=2,
+        semantic_similarity_for_paragraph=lambda paragraph_id: {
+            "p1": 0.1,
+            "p2": 0.9,
+        }[paragraph_id],
+    )
+
+    assert [paragraph.paragraph_id for paragraph in selected] == ["p2", "p1"]
 
 
 def test_select_greedy_paragraphs_uses_paragraph_id_as_final_tiebreak() -> None:
@@ -385,6 +479,98 @@ def test_select_concept_overlap_semantic_fallback_uses_semantic_tiebreak() -> No
 
     assert [paragraph.paragraph_id for paragraph in selected] == ["p2", "p1"]
     assert selected[0].semantic_similarity == 0.8
+
+
+def test_select_concept_gate_semantic_fallback_uses_concept_overlap_as_gate() -> None:
+    """Semantic-first concept gating should exclude paragraphs without matching concepts."""
+
+    corpus_index = CorpusIndex(
+        paragraphs_by_id={
+            "p1": IndexedParagraph(
+                paragraph_id="p1",
+                text="Paragraph 1",
+                metadata=None,
+                concept_ids=["c1"],
+                concept_texts=["developers"],
+                label_ids=["l1"],
+                label_display_names=["developers"],
+            ),
+            "p2": IndexedParagraph(
+                paragraph_id="p2",
+                text="Paragraph 2",
+                metadata=None,
+                concept_ids=["c2"],
+                concept_texts=["systems"],
+                label_ids=["l2"],
+                label_display_names=["systems"],
+            ),
+        }
+    )
+    query_analysis = QueryAnalysis(
+        query_text="How do developers work?",
+        concepts=["developers"],
+        concept_ids=["c1"],
+        label_ids=[],
+        label_display_names=[],
+    )
+
+    selected = select_concept_gate_semantic_fallback(
+        query_analysis,
+        corpus_index,
+        max_paragraphs=2,
+        semantic_similarity_for_paragraph=lambda paragraph_id: {
+            "p1": 0.2,
+            "p2": 0.9,
+        }[paragraph_id],
+    )
+
+    assert [paragraph.paragraph_id for paragraph in selected] == ["p1"]
+
+
+def test_select_concept_gate_semantic_fallback_prefers_similarity_before_overlap() -> None:
+    """Semantic-first concept gating should rank similarity before overlap count."""
+
+    corpus_index = CorpusIndex(
+        paragraphs_by_id={
+            "p1": IndexedParagraph(
+                paragraph_id="p1",
+                text="Paragraph 1",
+                metadata=None,
+                concept_ids=["c1", "c2"],
+                concept_texts=["developers", "systems"],
+                label_ids=["l1"],
+                label_display_names=["developers"],
+            ),
+            "p2": IndexedParagraph(
+                paragraph_id="p2",
+                text="Paragraph 2",
+                metadata=None,
+                concept_ids=["c1"],
+                concept_texts=["developers"],
+                label_ids=["l1", "l2"],
+                label_display_names=["developers", "systems"],
+            ),
+        }
+    )
+    query_analysis = QueryAnalysis(
+        query_text="How do developers work?",
+        concepts=["developers", "systems"],
+        concept_ids=["c1", "c2"],
+        label_ids=[],
+        label_display_names=[],
+    )
+
+    selected = select_concept_gate_semantic_fallback(
+        query_analysis,
+        corpus_index,
+        max_paragraphs=2,
+        semantic_similarity_for_paragraph=lambda paragraph_id: {
+            "p1": 0.1,
+            "p2": 0.9,
+        }[paragraph_id],
+    )
+
+    assert [paragraph.paragraph_id for paragraph in selected] == ["p2", "p1"]
 
 
 def test_select_semantic_only_fallback_uses_global_similarity_top_k() -> None:

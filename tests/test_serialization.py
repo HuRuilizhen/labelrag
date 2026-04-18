@@ -335,6 +335,34 @@ def test_pipeline_config_from_dict_defaults_missing_embedding_config() -> None:
     )
 
     assert config.embedding == EmbeddingConfig()
+    assert config.retrieval.retrieval_strategy == "greedy_label_coverage_semantic_rerank"
+
+
+def test_pipeline_config_from_dict_preserves_new_strategy_values() -> None:
+    """Serialized configs should round-trip the new retrieval strategy values."""
+
+    config = pipeline_config_from_dict(
+        {
+            "labelgen": {},
+            "embedding": {
+                "provider": "sentence-transformers",
+                "model": "sentence-transformers/all-MiniLM-L6-v2",
+                "dimensions": None,
+                "normalize": True,
+            },
+            "retrieval": {
+                "max_paragraphs": 8,
+                "retrieval_strategy": "label_gate_semantic_rank",
+                "require_full_label_coverage": False,
+                "allow_label_free_fallback": True,
+                "label_free_fallback_strategy": "concept_gate_semantic_rank",
+            },
+            "prompt": {},
+        }
+    )
+
+    assert config.retrieval.retrieval_strategy == "label_gate_semantic_rank"
+    assert config.retrieval.label_free_fallback_strategy == "concept_gate_semantic_rank"
 
 
 def test_load_rebuilds_legacy_concept_reverse_lookups(tmp_path: Path) -> None:

@@ -56,6 +56,54 @@ def test_build_context_returns_prompt_and_metadata() -> None:
     assert "[Paragraph 1" in result.prompt_context
 
 
+def test_build_context_supports_label_gate_semantic_rank() -> None:
+    """Main-path retrieval should support semantic-first ranking within label-gated candidates."""
+
+    config = RAGPipelineConfig()
+    config.retrieval.retrieval_strategy = "label_gate_semantic_rank"
+    pipeline = RAGPipeline(
+        config,
+        embedding_provider=StubEmbeddingProvider(
+            {
+                "OpenAI builds language models for developers.": [1.0, 1.0, 0.0],
+                "Developers use language models in production systems.": [0.5, 1.0, 1.0],
+                "Production systems need monitoring and evaluation tooling.": [0.0, 0.0, 1.0],
+            }
+        ),
+    )
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+            "Production systems need monitoring and evaluation tooling.",
+        ]
+    )
+
+    result = pipeline.build_context("How do developers use language models?")
+
+    assert result.metadata["retrieval_strategy"] == "label_gate_semantic_rank"
+    assert result.metadata["used_label_free_fallback"] is False
+    assert result.metadata["semantic_reranking_enabled"] is True
+    assert result.retrieved_paragraphs
+
+
+def test_build_context_rejects_invalid_main_retrieval_strategy() -> None:
+    """Invalid main retrieval strategies should fail clearly."""
+
+    config = RAGPipelineConfig()
+    config.retrieval.retrieval_strategy = "not-a-real-main-strategy"
+    pipeline = RAGPipeline(config, embedding_provider=StubEmbeddingProvider())
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="Unsupported retrieval strategy"):
+        pipeline.build_context("How do developers use language models?")
+
+
 def test_build_context_respects_prompt_configuration() -> None:
     """Context building should honor the prompt rendering configuration."""
 
@@ -157,6 +205,38 @@ def test_build_context_supports_semantic_only_fallback() -> None:
     assert result.metadata["retrieval_strategy"] == "semantic_only_fallback"
     assert result.metadata["semantic_reranking_enabled"] is True
     assert len(result.retrieved_paragraphs) == 2
+
+
+def test_build_context_supports_concept_gate_semantic_rank_fallback() -> None:
+    """Fallback should support concept-gated semantic-first ranking."""
+
+    class StubFallbackPipeline(RAGPipeline):
+        def analyze_query(self, question: str) -> QueryAnalysis:
+            del question
+            return QueryAnalysis(
+                query_text="developers",
+                concepts=["developers"],
+                concept_ids=["c1"],
+                label_ids=[],
+                label_display_names=[],
+            )
+
+    config = RAGPipelineConfig()
+    config.retrieval.label_free_fallback_strategy = "concept_gate_semantic_rank"
+    pipeline = StubFallbackPipeline(config, embedding_provider=StubEmbeddingProvider())
+    pipeline.fit(
+        [
+            "OpenAI builds language models for developers.",
+            "Developers use language models in production systems.",
+        ]
+    )
+
+    result = pipeline.build_context("ignored")
+
+    assert result.metadata["used_label_free_fallback"] is True
+    assert result.metadata["retrieval_strategy"] == "concept_gate_semantic_fallback"
+    assert result.metadata["label_free_fallback_strategy"] == "concept_gate_semantic_rank"
+    assert result.metadata["semantic_reranking_enabled"] is True
 
 
 def test_build_context_short_circuits_semantic_overlap_fallback_without_concepts() -> None:
