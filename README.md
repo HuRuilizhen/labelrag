@@ -5,7 +5,7 @@ pipelines built on top of `paralabelgen`.
 
 - PyPI distribution: `labelrag`
 - Python import package: `labelrag`
-- Core dependency target: `paralabelgen==0.2.2`
+- Core dependency target: `paralabelgen==0.2.3`
 - Primary supported extraction path: `paralabelgen` LLM concept extraction
 - First semantic-reranking embedding provider: `sentence-transformers`
 
@@ -22,9 +22,14 @@ English pipeline such as:
 python -m spacy download en_core_web_sm
 ```
 
-`en_core_web_sm` is a convenient local option, but `0.1.0` release validation
-targets the `paralabelgen==0.2.2` LLM concept-extraction pipeline as the
-primary supported extraction path.
+`en_core_web_sm` is a convenient local option, but the semantic-retrieval
+release line targets the `paralabelgen==0.2.3` LLM concept-extraction pipeline
+as the primary supported extraction path.
+
+The upstream `paralabelgen==0.2.3` runtime also supports DeepSeek-backed
+extraction through its own configuration surface. `labelrag` does not introduce
+DeepSeek-specific APIs; it continues to pass extraction configuration through to
+`paralabelgen`.
 
 The first shipped semantic-reranking provider uses `sentence-transformers`.
 Its model weights may be downloaded on first use if they are not already cached
@@ -120,13 +125,36 @@ Greedy selection order is:
 4. larger total paragraph label count
 5. lexicographically smaller `paragraph_id`
 
-`0.1.1` supports three label-free fallback strategies:
+`0.1.2` supports two main-path retrieval strategies:
+
+- `greedy_label_coverage_semantic_rerank`
+- `label_gate_semantic_rank`
+
+`label_gate_semantic_rank` keeps label overlap as a candidate gate but lets
+semantic similarity become the primary ranking signal inside that gated set.
+
+`0.1.2` supports four label-free fallback strategies:
 
 - `concept_overlap_only`
 - `concept_overlap_semantic_rerank`
+- `concept_gate_semantic_rank`
 - `semantic_only`
 
 The default is `concept_overlap_semantic_rerank`.
+
+`concept_gate_semantic_rank` mirrors the main gated semantic-first behavior for
+label-free queries:
+
+- paragraph concepts must still intersect the query concepts to enter the
+  candidate set
+- semantic similarity is then the primary ranking signal inside that gated set
+
+The default strategies remain unchanged in `0.1.2`:
+
+- main path:
+  - `greedy_label_coverage_semantic_rerank`
+- label-free fallback:
+  - `concept_overlap_semantic_rerank`
 
 ## OpenAI-Compatible Provider Notes
 
@@ -205,6 +233,7 @@ Runnable examples are available in [`examples/`](examples/):
 - [`examples/custom_config.py`](examples/custom_config.py)
 - [`examples/inspection_api.py`](examples/inspection_api.py)
 - [`examples/fallback_policies.py`](examples/fallback_policies.py)
+- [`examples/gated_semantic_rank.py`](examples/gated_semantic_rank.py)
 - [`examples/semantic_rerank.py`](examples/semantic_rerank.py)
 - [`examples/save_and_load.py`](examples/save_and_load.py)
 - [`examples/provider_answer.py`](examples/provider_answer.py)
@@ -264,11 +293,15 @@ Legacy snapshot note:
 ## Configuration Notes
 
 - `RetrievalConfig.max_paragraphs` sets the hard retrieval limit
+- `RetrievalConfig.retrieval_strategy` selects one of:
+  - `greedy_label_coverage_semantic_rerank`
+  - `label_gate_semantic_rank`
 - `RetrievalConfig.allow_label_free_fallback` enables deterministic concept
   fallback behavior for label-free queries
 - `RetrievalConfig.label_free_fallback_strategy` selects one of:
   - `concept_overlap_only`
   - `concept_overlap_semantic_rerank`
+  - `concept_gate_semantic_rank`
   - `semantic_only`
 - `RetrievalConfig.require_full_label_coverage` suppresses partial retrieval
   output when not all query labels can be covered
