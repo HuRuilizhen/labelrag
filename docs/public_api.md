@@ -8,7 +8,7 @@ concept extraction, community detection, and label assignment.
 
 Current dependency target:
 
-- `paralabelgen==0.2.2`
+- `paralabelgen==0.2.3`
 
 ## Package Entry Point
 
@@ -109,8 +109,8 @@ Extraction boundary:
 
 - `labelrag` remains extractor-agnostic and passes extraction configuration
   through `LabelGeneratorConfig`
-- for `0.1.0`, the primary supported and validated extraction path is the
-  `paralabelgen==0.2.2` LLM concept-extraction pipeline
+- for the semantic-retrieval line, the primary supported and validated
+  extraction path is the `paralabelgen==0.2.3` LLM concept-extraction pipeline
 
 #### `build_context`
 
@@ -253,6 +253,57 @@ The following conditions should raise explicit runtime errors:
 - `build_context(...)` before `fit(...)`
 - `answer(...)` before `fit(...)`
 - `save(...)` before the pipeline has enough state to serialize
+
+## Retrieval Configuration
+
+### `RetrievalConfig`
+
+```python
+@dataclass(slots=True)
+class RetrievalConfig:
+    max_paragraphs: int = 8
+    require_full_label_coverage: bool = False
+    allow_label_free_fallback: bool = True
+    label_free_fallback_strategy: str = "concept_overlap_semantic_rerank"
+    retrieval_strategy: str = "greedy_label_coverage_semantic_rerank"
+```
+
+Main-path retrieval strategies:
+
+- `greedy_label_coverage_semantic_rerank`
+  - the current default
+  - label gain remains the primary objective
+  - semantic similarity is a secondary ranking signal
+- `label_gate_semantic_rank`
+  - paragraph label intersection with query labels is only a gate
+  - semantic similarity becomes the primary ranking signal inside the gated set
+
+Label-free fallback strategies:
+
+- `concept_overlap_only`
+  - concept overlap is both the gate and the primary ranking signal
+- `concept_overlap_semantic_rerank`
+  - concept overlap forms the candidate set and remains the primary ranking
+    signal
+  - semantic similarity acts as a secondary ranking signal
+- `concept_gate_semantic_rank`
+  - concept overlap is only a gate
+  - semantic similarity becomes the primary ranking signal inside the gated set
+- `semantic_only`
+  - label-free fallback uses global semantic top-k retrieval over all stored
+    paragraphs
+
+Defaults:
+
+- main-path default:
+  - `greedy_label_coverage_semantic_rerank`
+- label-free fallback default:
+  - `concept_overlap_semantic_rerank`
+
+Compatibility note:
+
+- `retrieval_strategy` is placed after the existing positional fields to
+  preserve older positional `RetrievalConfig(...)` call sites
 
 ## Configuration Models
 
