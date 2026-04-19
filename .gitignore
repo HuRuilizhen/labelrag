@@ -13,6 +13,4 @@ build/
 *.egg-info/
 site/
 docs/
-!docs/
-docs/*
 !docs/public_api.md
