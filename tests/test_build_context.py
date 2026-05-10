@@ -45,6 +45,7 @@ def test_build_context_returns_prompt_and_metadata() -> None:
     assert result.metadata["retrieval_limit"] == pipeline.config.retrieval.max_paragraphs
     assert result.metadata["used_label_free_fallback"] is False
     assert result.metadata["full_label_coverage_met"] is True
+    assert "semantic_backfill_used" in result.metadata
     assert result.metadata["attempted_covered_label_ids"] == result.metadata["covered_label_ids"]
     assert (
         result.metadata["attempted_uncovered_label_ids"]
@@ -84,7 +85,39 @@ def test_build_context_supports_label_gate_semantic_rank() -> None:
     assert result.metadata["retrieval_strategy"] == "label_gate_semantic_rank"
     assert result.metadata["used_label_free_fallback"] is False
     assert result.metadata["semantic_reranking_enabled"] is True
+    assert result.metadata["semantic_backfill_used"] is False
     assert result.retrieved_paragraphs
+
+
+def test_build_context_uses_semantic_backfill_for_default_greedy_strategy() -> None:
+    """Default greedy retrieval should backfill remaining label-overlap candidates."""
+
+    config = RAGPipelineConfig()
+    config.retrieval.max_paragraphs = 3
+    pipeline = RAGPipeline(
+        config,
+        embedding_provider=StubEmbeddingProvider(
+            {
+                "Developers use language models in production systems.": [1.0, 1.0, 0.9],
+                "Developers use language models in real products.": [0.9, 1.0, 0.8],
+                "Developers use language models across product teams.": [0.8, 1.0, 0.7],
+                "How do developers use language models?": [1.0, 1.0, 1.0],
+            }
+        ),
+    )
+    pipeline.fit(
+        [
+            "Developers use language models in production systems.",
+            "Developers use language models in real products.",
+            "Developers use language models across product teams.",
+        ]
+    )
+
+    result = pipeline.build_context("How do developers use language models?")
+
+    assert result.metadata["retrieval_strategy"] == "greedy_label_coverage_semantic_rerank"
+    assert result.metadata["semantic_backfill_used"] is True
+    assert len(result.retrieved_paragraphs) == 3
 
 
 def test_build_context_rejects_invalid_main_retrieval_strategy() -> None:
@@ -374,7 +407,7 @@ def test_build_context_can_require_full_label_coverage() -> None:
         def _retrieve_paragraphs(
             self,
             query_analysis: QueryAnalysis,
-        ) -> tuple[list[RetrievedParagraph], bool, str]:
+        ) -> tuple[list[RetrievedParagraph], bool, str, bool]:
             del query_analysis
             return (
                 [
@@ -396,6 +429,7 @@ def test_build_context_can_require_full_label_coverage() -> None:
                 ],
                 True,
                 "greedy_label_coverage_semantic_rerank",
+                False,
             )
 
     config = RAGPipelineConfig()

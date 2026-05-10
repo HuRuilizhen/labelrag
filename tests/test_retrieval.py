@@ -54,7 +54,7 @@ def test_select_greedy_paragraphs_covers_query_labels_greedily() -> None:
         label_display_names=["developers", "systems"],
     )
 
-    selected = select_greedy_paragraphs(
+    selected, semantic_backfill_used = select_greedy_paragraphs(
         query_analysis,
         corpus_index,
         max_paragraphs=3,
@@ -65,7 +65,8 @@ def test_select_greedy_paragraphs_covers_query_labels_greedily() -> None:
         }[paragraph_id],
     )
 
-    assert [paragraph.paragraph_id for paragraph in selected] == ["p3"]
+    assert [paragraph.paragraph_id for paragraph in selected] == ["p3", "p2", "p1"]
+    assert semantic_backfill_used is True
     assert selected[0].marginal_gain == 2
     assert selected[0].semantic_similarity == 0.9
     assert selected[0].newly_covered_label_ids == ["l1", "l2"]
@@ -105,7 +106,7 @@ def test_select_greedy_paragraphs_uses_semantic_similarity_as_tiebreak() -> None
         label_display_names=["developers"],
     )
 
-    selected = select_greedy_paragraphs(
+    selected, semantic_backfill_used = select_greedy_paragraphs(
         query_analysis,
         corpus_index,
         max_paragraphs=2,
@@ -115,7 +116,8 @@ def test_select_greedy_paragraphs_uses_semantic_similarity_as_tiebreak() -> None
         }[paragraph_id],
     )
 
-    assert [paragraph.paragraph_id for paragraph in selected] == ["p2"]
+    assert [paragraph.paragraph_id for paragraph in selected] == ["p2", "p1"]
+    assert semantic_backfill_used is True
 
 
 def test_select_label_gate_semantic_paragraphs_uses_label_overlap_as_gate() -> None:
@@ -243,14 +245,15 @@ def test_select_greedy_paragraphs_uses_paragraph_id_as_final_tiebreak() -> None:
         label_display_names=["developers"],
     )
 
-    selected = select_greedy_paragraphs(
+    selected, semantic_backfill_used = select_greedy_paragraphs(
         query_analysis,
         corpus_index,
         max_paragraphs=2,
         semantic_similarity_for_paragraph=lambda _paragraph_id: 0.5,
     )
 
-    assert [paragraph.paragraph_id for paragraph in selected] == ["p1"]
+    assert [paragraph.paragraph_id for paragraph in selected] == ["p1", "p2"]
+    assert semantic_backfill_used is True
 
 
 def test_select_greedy_paragraphs_respects_max_paragraphs() -> None:
@@ -286,7 +289,7 @@ def test_select_greedy_paragraphs_respects_max_paragraphs() -> None:
         label_display_names=["developers", "systems"],
     )
 
-    selected = select_greedy_paragraphs(
+    selected, semantic_backfill_used = select_greedy_paragraphs(
         query_analysis,
         corpus_index,
         max_paragraphs=1,
@@ -297,6 +300,7 @@ def test_select_greedy_paragraphs_respects_max_paragraphs() -> None:
     )
 
     assert len(selected) == 1
+    assert semantic_backfill_used is False
 
 
 def test_select_greedy_paragraphs_tracks_already_covered_labels() -> None:
@@ -332,7 +336,7 @@ def test_select_greedy_paragraphs_tracks_already_covered_labels() -> None:
         label_display_names=["developers", "systems"],
     )
 
-    selected = select_greedy_paragraphs(
+    selected, semantic_backfill_used = select_greedy_paragraphs(
         query_analysis,
         corpus_index,
         max_paragraphs=2,
@@ -342,7 +346,8 @@ def test_select_greedy_paragraphs_tracks_already_covered_labels() -> None:
         }[paragraph_id],
     )
 
-    assert [paragraph.paragraph_id for paragraph in selected] == ["p2"]
+    assert [paragraph.paragraph_id for paragraph in selected] == ["p2", "p1"]
+    assert semantic_backfill_used is True
 
 
 def test_select_greedy_paragraphs_prefers_gain_over_semantic_similarity() -> None:
@@ -378,7 +383,7 @@ def test_select_greedy_paragraphs_prefers_gain_over_semantic_similarity() -> Non
         label_display_names=["developers", "systems"],
     )
 
-    selected = select_greedy_paragraphs(
+    selected, semantic_backfill_used = select_greedy_paragraphs(
         query_analysis,
         corpus_index,
         max_paragraphs=2,
@@ -388,7 +393,55 @@ def test_select_greedy_paragraphs_prefers_gain_over_semantic_similarity() -> Non
         }[paragraph_id],
     )
 
+    assert [paragraph.paragraph_id for paragraph in selected] == ["p1", "p2"]
+    assert semantic_backfill_used is True
+
+
+def test_select_greedy_paragraphs_backfill_excludes_non_matching_labels() -> None:
+    """Backfill should stay inside the label-overlap candidate universe."""
+
+    corpus_index = CorpusIndex(
+        paragraphs_by_id={
+            "p1": IndexedParagraph(
+                paragraph_id="p1",
+                text="Paragraph 1",
+                metadata=None,
+                concept_ids=["c1"],
+                concept_texts=["developers"],
+                label_ids=["l1"],
+                label_display_names=["developers"],
+            ),
+            "p2": IndexedParagraph(
+                paragraph_id="p2",
+                text="Paragraph 2",
+                metadata=None,
+                concept_ids=["c2"],
+                concept_texts=["systems"],
+                label_ids=["l2"],
+                label_display_names=["systems"],
+            ),
+        }
+    )
+    query_analysis = QueryAnalysis(
+        query_text="How do developers work?",
+        concepts=["developers"],
+        concept_ids=["c1"],
+        label_ids=["l1"],
+        label_display_names=["developers"],
+    )
+
+    selected, semantic_backfill_used = select_greedy_paragraphs(
+        query_analysis,
+        corpus_index,
+        max_paragraphs=2,
+        semantic_similarity_for_paragraph=lambda paragraph_id: {
+            "p1": 0.3,
+            "p2": 0.99,
+        }[paragraph_id],
+    )
+
     assert [paragraph.paragraph_id for paragraph in selected] == ["p1"]
+    assert semantic_backfill_used is False
 
 
 def test_select_concept_overlap_fallback_preserves_overlap_ordering() -> None:
