@@ -24,6 +24,7 @@ def test_build_prompt_context_includes_paragraph_ids_by_default() -> None:
                 marginal_gain=1,
                 semantic_similarity=0.5,
                 retrieval_score=1.0,
+                retrieval_score_kind="label_gain",
             )
         ],
         PromptConfig(),
@@ -52,6 +53,7 @@ def test_build_prompt_context_respects_character_limit() -> None:
                 marginal_gain=1,
                 semantic_similarity=0.5,
                 retrieval_score=1.0,
+                retrieval_score_kind="label_gain",
             )
         ],
         PromptConfig(max_context_characters=8),
@@ -79,6 +81,7 @@ def test_build_prompt_context_can_include_label_annotations() -> None:
                 marginal_gain=1,
                 semantic_similarity=0.5,
                 retrieval_score=1.0,
+                retrieval_score_kind="label_gain",
             )
         ],
         PromptConfig(include_label_annotations=True),

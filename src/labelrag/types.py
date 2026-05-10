@@ -64,6 +64,7 @@ class RetrievedParagraph:
     marginal_gain: int
     semantic_similarity: float | None
     retrieval_score: float
+    retrieval_score_kind: str = ""
 
 
 @dataclass(slots=True)

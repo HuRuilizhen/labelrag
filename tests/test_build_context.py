@@ -46,6 +46,7 @@ def test_build_context_returns_prompt_and_metadata() -> None:
     assert result.metadata["used_label_free_fallback"] is False
     assert result.metadata["full_label_coverage_met"] is True
     assert "semantic_backfill_used" in result.metadata
+    assert result.retrieved_paragraphs[0].retrieval_score_kind == "label_gain"
     assert result.metadata["attempted_covered_label_ids"] == result.metadata["covered_label_ids"]
     assert (
         result.metadata["attempted_uncovered_label_ids"]
@@ -118,6 +119,9 @@ def test_build_context_uses_semantic_backfill_for_default_greedy_strategy() -> N
     assert result.metadata["retrieval_strategy"] == "greedy_label_coverage_semantic_rerank"
     assert result.metadata["semantic_backfill_used"] is True
     assert len(result.retrieved_paragraphs) == 3
+    assert result.retrieved_paragraphs[0].retrieval_score_kind == "label_gain"
+    assert result.retrieved_paragraphs[1].retrieval_score_kind == "semantic_similarity"
+    assert result.retrieved_paragraphs[2].retrieval_score_kind == "semantic_similarity"
 
 
 def test_build_context_rejects_invalid_main_retrieval_strategy() -> None:
@@ -425,6 +429,7 @@ def test_build_context_can_require_full_label_coverage() -> None:
                         marginal_gain=1,
                         semantic_similarity=0.25,
                         retrieval_score=1.0,
+                        retrieval_score_kind="label_gain",
                     )
                 ],
                 True,
