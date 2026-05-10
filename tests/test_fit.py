@@ -59,10 +59,10 @@ def test_fit_accepts_paragraph_objects_and_preserves_metadata() -> None:
 
     assert pipeline.corpus_index is not None
     assert "doc-1#p0" in pipeline.corpus_index.paragraphs_by_id
-    assert (
-        pipeline.corpus_index.paragraphs_by_id["doc-1#p0"].metadata
-        == {"doc_id": "doc-1", "title": "Doc One"}
-    )
+    assert pipeline.corpus_index.paragraphs_by_id["doc-1#p0"].metadata == {
+        "doc_id": "doc-1",
+        "title": "Doc One",
+    }
 
 
 def test_fit_accepts_reconstructed_serialized_paragraph_payloads() -> None:
@@ -87,10 +87,10 @@ def test_fit_accepts_reconstructed_serialized_paragraph_payloads() -> None:
 
     assert pipeline.corpus_index is not None
     assert "doc-2#p0" in pipeline.corpus_index.paragraphs_by_id
-    assert (
-        pipeline.corpus_index.paragraphs_by_id["doc-2#p0"].metadata
-        == {"doc_id": "doc-2", "title": "Serialized Doc"}
-    )
+    assert pipeline.corpus_index.paragraphs_by_id["doc-2#p0"].metadata == {
+        "doc_id": "doc-2",
+        "title": "Serialized Doc",
+    }
 
 
 def test_fit_builds_label_and_concept_lookup_tables() -> None:

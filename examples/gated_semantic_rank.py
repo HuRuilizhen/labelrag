@@ -53,10 +53,7 @@ def run_fallback_example() -> None:
 
     print("\n=== fallback: concept_gate_semantic_rank ===")
     print(f"retrieval_strategy: {result.metadata['retrieval_strategy']}")
-    print(
-        "label_free_fallback_strategy: "
-        f"{result.metadata['label_free_fallback_strategy']}"
-    )
+    print(f"label_free_fallback_strategy: {result.metadata['label_free_fallback_strategy']}")
     print(f"semantic_reranking_enabled: {result.metadata['semantic_reranking_enabled']}")
     for paragraph in result.retrieved_paragraphs:
         print(

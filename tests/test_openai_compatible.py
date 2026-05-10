@@ -126,7 +126,9 @@ def test_openai_compatible_generator_formats_http_errors() -> None:
     """HTTP errors should raise a useful runtime error."""
 
     generator = OpenAICompatibleAnswerGenerator(
-        OpenAICompatibleConfig(model="test-model", api_key="secret", base_url="https://example.com/v1")
+        OpenAICompatibleConfig(
+            model="test-model", api_key="secret", base_url="https://example.com/v1"
+        )
     )
     headers = Message()
 
