@@ -1,10 +1,24 @@
 """Selection helpers for greedy retrieval ranking."""
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from labelrag.indexing.corpus_index import CorpusIndex
 from labelrag.retrieval.coverage import uncovered_overlap_size
 from labelrag.types import QueryAnalysis, RetrievedParagraph
+
+
+@dataclass(slots=True)
+class _GreedyCandidate:
+    """Lightweight internal candidate record for greedy main-path selection."""
+
+    paragraph_id: str
+    matched_label_ids: list[str]
+    matched_concept_ids: list[str]
+    paragraph_label_ids: list[str]
+    paragraph_concept_ids: list[str]
+    concept_overlap_count: int
+    semantic_similarity: float
 
 
 def rank_retrieved_paragraphs(
@@ -40,7 +54,7 @@ def select_greedy_paragraphs(
     remaining_label_ids = set(query_analysis.label_ids)
     query_label_ids = set(query_analysis.label_ids)
     query_concept_ids = set(query_analysis.concept_ids)
-    label_overlap_candidates: list[RetrievedParagraph] = []
+    label_overlap_candidates: list[_GreedyCandidate] = []
 
     for paragraph in corpus_index.paragraphs_by_id.values():
         paragraph_label_ids = set(paragraph.label_ids)
@@ -51,20 +65,14 @@ def select_greedy_paragraphs(
         matched_concept_ids = sorted(set(paragraph.concept_ids) & query_concept_ids)
         semantic_similarity = semantic_similarity_for_paragraph(paragraph.paragraph_id)
         label_overlap_candidates.append(
-            RetrievedParagraph(
+            _GreedyCandidate(
                 paragraph_id=paragraph.paragraph_id,
-                text=paragraph.text,
-                metadata=paragraph.metadata,
-                newly_covered_label_ids=[],
-                already_covered_label_ids=[],
                 matched_label_ids=matched_label_ids,
                 matched_concept_ids=matched_concept_ids,
                 paragraph_label_ids=list(paragraph.label_ids),
                 paragraph_concept_ids=list(paragraph.concept_ids),
                 concept_overlap_count=len(matched_concept_ids),
-                marginal_gain=0,
                 semantic_similarity=semantic_similarity,
-                retrieval_score=0.0,
             )
         )
 
@@ -87,10 +95,11 @@ def select_greedy_paragraphs(
             already_covered_label_ids = sorted(
                 (paragraph_label_ids & query_label_ids) - set(newly_covered_label_ids)
             )
+            paragraph = corpus_index.paragraphs_by_id[candidate.paragraph_id]
             greedy_candidate = RetrievedParagraph(
                 paragraph_id=candidate.paragraph_id,
-                text=candidate.text,
-                metadata=candidate.metadata,
+                text=paragraph.text,
+                metadata=paragraph.metadata,
                 newly_covered_label_ids=newly_covered_label_ids,
                 already_covered_label_ids=already_covered_label_ids,
                 matched_label_ids=list(candidate.matched_label_ids),
@@ -140,11 +149,12 @@ def select_greedy_paragraphs(
                 ),
             )
             for candidate in ranked_backfill[: max_paragraphs - len(selected)]:
+                paragraph = corpus_index.paragraphs_by_id[candidate.paragraph_id]
                 selected.append(
                     RetrievedParagraph(
                         paragraph_id=candidate.paragraph_id,
-                        text=candidate.text,
-                        metadata=candidate.metadata,
+                        text=paragraph.text,
+                        metadata=paragraph.metadata,
                         newly_covered_label_ids=[],
                         already_covered_label_ids=list(candidate.matched_label_ids),
                         matched_label_ids=list(candidate.matched_label_ids),
