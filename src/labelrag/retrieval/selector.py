@@ -110,6 +110,7 @@ def select_greedy_paragraphs(
                 marginal_gain=gain,
                 semantic_similarity=candidate.semantic_similarity,
                 retrieval_score=float(gain),
+                retrieval_score_kind="label_gain",
             )
             sort_key = (
                 gain,
@@ -165,6 +166,7 @@ def select_greedy_paragraphs(
                         marginal_gain=0,
                         semantic_similarity=candidate.semantic_similarity,
                         retrieval_score=float(candidate.semantic_similarity or 0.0),
+                        retrieval_score_kind="semantic_similarity",
                     )
                 )
 
@@ -205,6 +207,7 @@ def select_label_gate_semantic_paragraphs(
                 marginal_gain=len(matched_label_ids),
                 semantic_similarity=semantic_similarity,
                 retrieval_score=float(semantic_similarity),
+                retrieval_score_kind="semantic_similarity",
             )
         )
 
@@ -250,6 +253,7 @@ def select_concept_overlap_fallback(
                 marginal_gain=0,
                 semantic_similarity=None,
                 retrieval_score=float(len(matched_concept_ids)),
+                retrieval_score_kind="concept_overlap_count",
             )
         )
 
@@ -295,6 +299,7 @@ def select_concept_overlap_semantic_fallback(
                 marginal_gain=0,
                 semantic_similarity=semantic_similarity,
                 retrieval_score=float(len(matched_concept_ids)),
+                retrieval_score_kind="concept_overlap_count",
             )
         )
 
@@ -341,6 +346,7 @@ def select_concept_gate_semantic_fallback(
                 marginal_gain=0,
                 semantic_similarity=semantic_similarity,
                 retrieval_score=float(semantic_similarity),
+                retrieval_score_kind="semantic_similarity",
             )
         )
 
@@ -384,6 +390,7 @@ def select_semantic_only_fallback(
                 marginal_gain=0,
                 semantic_similarity=semantic_similarity,
                 retrieval_score=float(semantic_similarity),
+                retrieval_score_kind="semantic_similarity",
             )
         )
 

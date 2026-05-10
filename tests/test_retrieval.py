@@ -69,6 +69,9 @@ def test_select_greedy_paragraphs_covers_query_labels_greedily() -> None:
     assert semantic_backfill_used is True
     assert selected[0].marginal_gain == 2
     assert selected[0].semantic_similarity == 0.9
+    assert selected[0].retrieval_score_kind == "label_gain"
+    assert selected[1].retrieval_score_kind == "semantic_similarity"
+    assert selected[2].retrieval_score_kind == "semantic_similarity"
     assert selected[0].newly_covered_label_ids == ["l1", "l2"]
     assert selected[0].already_covered_label_ids == []
 
@@ -118,6 +121,8 @@ def test_select_greedy_paragraphs_uses_semantic_similarity_as_tiebreak() -> None
 
     assert [paragraph.paragraph_id for paragraph in selected] == ["p2", "p1"]
     assert semantic_backfill_used is True
+    assert selected[0].retrieval_score_kind == "label_gain"
+    assert selected[1].retrieval_score_kind == "semantic_similarity"
 
 
 def test_select_label_gate_semantic_paragraphs_uses_label_overlap_as_gate() -> None:
@@ -442,6 +447,7 @@ def test_select_greedy_paragraphs_backfill_excludes_non_matching_labels() -> Non
 
     assert [paragraph.paragraph_id for paragraph in selected] == ["p1"]
     assert semantic_backfill_used is False
+    assert selected[0].retrieval_score_kind == "label_gain"
 
 
 def test_select_concept_overlap_fallback_preserves_overlap_ordering() -> None:
