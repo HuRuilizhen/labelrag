@@ -249,7 +249,7 @@ class RAGPipeline:
     def _retrieve_paragraphs(
         self,
         query_analysis: QueryAnalysis,
-    ) -> tuple[list[RetrievedParagraph], bool, str]:
+    ) -> tuple[list[RetrievedParagraph], bool, str, bool]:
         """Retrieve paragraphs for a analyzed query using greedy label coverage."""
 
         self._require_fitted()
@@ -258,7 +258,7 @@ class RAGPipeline:
 
         if not query_analysis.label_ids:
             if not self.config.retrieval.allow_label_free_fallback:
-                return [], False, "no_retrieval"
+                return [], False, "no_retrieval", False
             strategy = self.config.retrieval.label_free_fallback_strategy
             supported_strategies = {
                 "concept_overlap_only",
@@ -282,14 +282,15 @@ class RAGPipeline:
                     ),
                     False,
                     "concept_overlap_only_fallback",
+                    False,
                 )
             if (
                 strategy in {"concept_overlap_semantic_rerank", "concept_gate_semantic_rank"}
                 and not query_analysis.concept_ids
             ):
                 if strategy == "concept_gate_semantic_rank":
-                    return [], False, "concept_gate_semantic_fallback"
-                return [], False, "concept_overlap_semantic_fallback"
+                    return [], False, "concept_gate_semantic_fallback", False
+                return [], False, "concept_overlap_semantic_fallback", False
             semantic_similarity_by_paragraph = self._semantic_similarity_lookup(
                 question=query_analysis.query_text
             )
@@ -307,6 +308,7 @@ class RAGPipeline:
                     ),
                     True,
                     "concept_overlap_semantic_fallback",
+                    False,
                 )
             if strategy == "concept_gate_semantic_rank":
                 return (
@@ -318,6 +320,7 @@ class RAGPipeline:
                     ),
                     True,
                     "concept_gate_semantic_fallback",
+                    False,
                 )
             if strategy == "semantic_only":
                 return (
@@ -329,6 +332,7 @@ class RAGPipeline:
                     ),
                     True,
                     "semantic_only_fallback",
+                    False,
                 )
 
         strategy = self.config.retrieval.retrieval_strategy
@@ -346,17 +350,19 @@ class RAGPipeline:
             question=query_analysis.query_text
         )
         if strategy == "greedy_label_coverage_semantic_rerank":
-            return (
-                select_greedy_paragraphs(
-                    query_analysis,
-                    self._corpus_index,
-                    max_paragraphs=self.config.retrieval.max_paragraphs,
-                    semantic_similarity_for_paragraph=(
-                        lambda paragraph_id: semantic_similarity_by_paragraph[paragraph_id]
-                    ),
+            selected_paragraphs, semantic_backfill_used = select_greedy_paragraphs(
+                query_analysis,
+                self._corpus_index,
+                max_paragraphs=self.config.retrieval.max_paragraphs,
+                semantic_similarity_for_paragraph=(
+                    lambda paragraph_id: semantic_similarity_by_paragraph[paragraph_id]
                 ),
+            )
+            return (
+                selected_paragraphs,
                 True,
                 "greedy_label_coverage_semantic_rerank",
+                semantic_backfill_used,
             )
         if strategy == "label_gate_semantic_rank":
             return (
@@ -370,6 +376,7 @@ class RAGPipeline:
                 ),
                 True,
                 "label_gate_semantic_rank",
+                False,
             )
         raise AssertionError("Validated retrieval strategy should have matched a branch.")
 
@@ -381,6 +388,7 @@ class RAGPipeline:
             retrieved_paragraphs,
             semantic_reranking_used,
             retrieval_strategy,
+            semantic_backfill_used,
         ) = self._retrieve_paragraphs(query_analysis)
         attempted_covered_label_ids = sorted(
             {
@@ -437,6 +445,7 @@ class RAGPipeline:
                     else ""
                 ),
                 "semantic_reranking_enabled": semantic_reranking_used,
+                "semantic_backfill_used": semantic_backfill_used,
             },
         )
 
