@@ -215,9 +215,7 @@ def ensure_persistence_artifacts_exist(
         )
     if missing_paths:
         missing = ", ".join(missing_paths)
-        raise RuntimeError(
-            f"Missing persistence artifacts for format `{format}`: {missing}."
-        )
+        raise RuntimeError(f"Missing persistence artifacts for format `{format}`: {missing}.")
 
 
 def has_manifest(root: str | Path, format: PersistenceFormat) -> bool:
@@ -262,23 +260,15 @@ def validate_manifest(
         )
 
     artifact_names = _as_string_list(data.get("artifacts"))
-    expected_artifacts = [
-        persistence_path(".", stem, format).name
-        for stem in _ARTIFACT_STEMS
-    ]
+    expected_artifacts = [persistence_path(".", stem, format).name for stem in _ARTIFACT_STEMS]
     if _manifest_requires_embedding_artifact(data):
         expected_artifacts.extend(_EXTRA_ARTIFACTS)
     missing_artifacts = [
-        artifact_name
-        for artifact_name in expected_artifacts
-        if artifact_name not in artifact_names
+        artifact_name for artifact_name in expected_artifacts if artifact_name not in artifact_names
     ]
     if missing_artifacts:
         missing = ", ".join(missing_artifacts)
-        raise RuntimeError(
-            "Persistence manifest is missing required artifact entries: "
-            f"{missing}."
-        )
+        raise RuntimeError(f"Persistence manifest is missing required artifact entries: {missing}.")
 
 
 def _normalize_persistence_format(value: str) -> PersistenceFormat:
@@ -389,13 +379,9 @@ def corpus_index_from_dict(
     }
     concept_ids_by_paragraph = {
         paragraph_id: _as_string_list(value)
-        for paragraph_id, value in _as_string_key_dict(
-            data.get("concept_ids_by_paragraph")
-        ).items()
+        for paragraph_id, value in _as_string_key_dict(data.get("concept_ids_by_paragraph")).items()
     }
-    paragraph_ids_by_concept_data = _as_string_key_dict(
-        data.get("paragraph_ids_by_concept", {})
-    )
+    paragraph_ids_by_concept_data = _as_string_key_dict(data.get("paragraph_ids_by_concept", {}))
     concept_texts_by_id_data = _as_string_key_dict(data.get("concept_texts_by_id", {}))
     label_concept_ids_by_id_data = _as_string_key_dict(data.get("label_concept_ids_by_id", {}))
 
@@ -407,15 +393,13 @@ def corpus_index_from_dict(
         paragraph_ids_by_concept = _rebuild_paragraph_ids_by_concept(concept_ids_by_paragraph)
 
     concept_texts_by_id = {
-        concept_id: _as_string(value)
-        for concept_id, value in concept_texts_by_id_data.items()
+        concept_id: _as_string(value) for concept_id, value in concept_texts_by_id_data.items()
     }
     if not concept_texts_by_id:
         concept_texts_by_id = _rebuild_concept_texts_by_id(paragraphs_by_id)
 
     label_concept_ids_by_id = {
-        label_id: _as_string_list(value)
-        for label_id, value in label_concept_ids_by_id_data.items()
+        label_id: _as_string_list(value) for label_id, value in label_concept_ids_by_id_data.items()
     }
     paragraph_ids_by_label = {
         label_id: _as_string_list(value)
@@ -489,10 +473,7 @@ def _rebuild_label_concept_ids_by_id(
     """Rebuild label-to-concept mappings from paragraph-side assignments."""
 
     if fit_result is not None:
-        return {
-            community.id: sorted(community.concept_ids)
-            for community in fit_result.communities
-        }
+        return {community.id: sorted(community.concept_ids) for community in fit_result.communities}
 
     label_concept_ids_by_id: dict[str, list[str]] = {}
     for label_id, paragraph_ids in paragraph_ids_by_label.items():

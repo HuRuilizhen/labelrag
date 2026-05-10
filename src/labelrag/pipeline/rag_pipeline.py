@@ -99,10 +99,7 @@ class RAGPipeline:
         corpus_index = build_corpus_index(result)
         paragraph_ids = sorted(corpus_index.paragraphs_by_id)
         embeddings = self._embedding_provider.embed_documents(
-            [
-                corpus_index.paragraphs_by_id[paragraph_id].text
-                for paragraph_id in paragraph_ids
-            ]
+            [corpus_index.paragraphs_by_id[paragraph_id].text for paragraph_id in paragraph_ids]
         )
         if len(embeddings) != len(paragraph_ids):
             raise RuntimeError(

@@ -8,4 +8,3 @@ def uncovered_overlap_size(
     """Return the count of uncovered query labels matched by a paragraph."""
 
     return len(paragraph_label_ids & remaining_label_ids)
-

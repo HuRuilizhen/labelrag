@@ -1,2 +1,1 @@
 """Retrieval helpers for `labelrag`."""
-

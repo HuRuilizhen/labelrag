@@ -37,10 +37,7 @@ def test_build_context_returns_prompt_and_metadata() -> None:
     assert result.metadata["embedding_provider"] == "stub"
     assert result.metadata["embedding_model"] == "stub-embedding-model"
     assert result.metadata["semantic_reranking_enabled"] is True
-    assert (
-        result.metadata["label_free_fallback_strategy"]
-        == "concept_overlap_semantic_rerank"
-    )
+    assert result.metadata["label_free_fallback_strategy"] == "concept_overlap_semantic_rerank"
     assert result.metadata["query_label_ids"] == result.query_analysis.label_ids
     assert result.metadata["retrieval_limit"] == pipeline.config.retrieval.max_paragraphs
     assert result.metadata["used_label_free_fallback"] is False
@@ -49,8 +46,7 @@ def test_build_context_returns_prompt_and_metadata() -> None:
     assert result.retrieved_paragraphs[0].retrieval_score_kind == "label_gain"
     assert result.metadata["attempted_covered_label_ids"] == result.metadata["covered_label_ids"]
     assert (
-        result.metadata["attempted_uncovered_label_ids"]
-        == result.metadata["uncovered_label_ids"]
+        result.metadata["attempted_uncovered_label_ids"] == result.metadata["uncovered_label_ids"]
     )
     assert "covered_label_ids" in result.metadata
     assert "uncovered_label_ids" in result.metadata
@@ -204,10 +200,7 @@ def test_build_context_uses_default_label_free_fallback_strategy() -> None:
 
     assert result.metadata["used_label_free_fallback"] is True
     assert result.metadata["retrieval_strategy"] == "concept_overlap_semantic_fallback"
-    assert (
-        result.metadata["label_free_fallback_strategy"]
-        == "concept_overlap_semantic_rerank"
-    )
+    assert result.metadata["label_free_fallback_strategy"] == "concept_overlap_semantic_rerank"
     assert result.metadata["covered_label_ids"] == []
     assert result.metadata["uncovered_label_ids"] == []
     assert result.metadata["attempted_covered_label_ids"] == []

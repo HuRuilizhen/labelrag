@@ -272,8 +272,14 @@ Main-path retrieval strategies:
 
 - `greedy_label_coverage_semantic_rerank`
   - the current default
-  - label gain remains the primary objective
-  - semantic similarity is a secondary ranking signal
+  - retrieval now has two stages inside one label-overlap candidate universe:
+    1. greedy label coverage
+    2. semantic backfill from remaining label-overlap candidates when
+       coverage completes before `max_paragraphs`
+  - label gain remains the primary objective during the greedy coverage stage
+  - semantic similarity is a secondary ranking signal during greedy coverage
+  - semantic similarity becomes the primary ranking signal during the optional
+    backfill stage
 - `label_gate_semantic_rank`
   - paragraph label intersection with query labels is only a gate
   - semantic similarity becomes the primary ranking signal inside the gated set
@@ -318,6 +324,7 @@ class RetrievalConfig:
     require_full_label_coverage: bool = False
     allow_label_free_fallback: bool = True
     label_free_fallback_strategy: str = "concept_overlap_semantic_rerank"
+    retrieval_strategy: str = "greedy_label_coverage_semantic_rerank"
 ```
 
 Field meaning:
@@ -329,6 +336,8 @@ Field meaning:
   return a fallback retrieval result
 - `label_free_fallback_strategy`: which retrieval policy to use for no-label
   fallback when fallback is enabled
+- `retrieval_strategy`: which retrieval policy to use on the main path when
+  query labels are available
 
 Supported fallback strategies:
 
@@ -337,9 +346,21 @@ Supported fallback strategies:
 - `concept_overlap_semantic_rerank`
   - uses concept-overlap candidates and semantic similarity as a secondary
     ranking signal
+- `concept_gate_semantic_rank`
+  - uses concept overlap only as a gate, then semantic similarity as the
+    primary ranking signal
 - `semantic_only`
   - uses semantic similarity directly over the full fitted paragraph set for
     no-label fallback
+
+Supported main-path strategies:
+
+- `greedy_label_coverage_semantic_rerank`
+  - runs greedy coverage first, then may use semantic backfill inside the
+    remaining label-overlap candidate set
+- `label_gate_semantic_rank`
+  - uses label overlap only as a gate, then semantic similarity as the primary
+    ranking signal
 
 ### `PromptConfig`
 
@@ -482,6 +503,7 @@ class RetrievedParagraph:
     marginal_gain: int
     semantic_similarity: float | None
     retrieval_score: float
+    retrieval_score_kind: str = ""
 ```
 
 Meaning:
@@ -496,6 +518,11 @@ Meaning:
   used in tie-break decisions
 - `semantic_similarity` records the query-to-paragraph cosine similarity used
   as the secondary greedy ranking signal when semantic reranking executes
+- `retrieval_score_kind` records how to interpret `retrieval_score`
+  for the current retrieval record
+  - `label_gain`
+  - `concept_overlap_count`
+  - `semantic_similarity`
 
 ### `RetrievalResult`
 
@@ -528,6 +555,7 @@ Recommended additional metadata keys:
 - `embedding_provider`
 - `embedding_model`
 - `semantic_reranking_enabled`
+- `semantic_backfill_used`
 
 ### `GeneratedAnswer`
 
