@@ -125,6 +125,17 @@ Greedy selection order is:
 4. larger total paragraph label count
 5. lexicographically smaller `paragraph_id`
 
+In `0.1.3`, the default main-path strategy is slightly more practical when
+coverage completes early:
+
+- it first builds the label-overlap candidate universe
+- it still runs greedy label coverage first
+- if coverage finishes before `max_paragraphs`, it backfills from the remaining
+  label-overlap candidates by semantic similarity
+
+This keeps the default path label-bounded while making `top_k` retrieval less
+likely to collapse to a single paragraph for single-label queries.
+
 `0.1.2` supports two main-path retrieval strategies:
 
 - `greedy_label_coverage_semantic_rerank`
@@ -149,12 +160,16 @@ label-free queries:
   candidate set
 - semantic similarity is then the primary ranking signal inside that gated set
 
-The default strategies remain unchanged in `0.1.2`:
+The default strategies remain unchanged in `0.1.3`:
 
 - main path:
   - `greedy_label_coverage_semantic_rerank`
 - label-free fallback:
   - `concept_overlap_semantic_rerank`
+
+The retrieval trace now also distinguishes the meaning of `retrieval_score`
+per result through `retrieval_score_kind`, and the default greedy main path
+reports whether semantic backfill ran through `semantic_backfill_used`.
 
 ## OpenAI-Compatible Provider Notes
 
@@ -234,6 +249,7 @@ Runnable examples are available in [`examples/`](examples/):
 - [`examples/inspection_api.py`](examples/inspection_api.py)
 - [`examples/fallback_policies.py`](examples/fallback_policies.py)
 - [`examples/gated_semantic_rank.py`](examples/gated_semantic_rank.py)
+- [`examples/greedy_backfill.py`](examples/greedy_backfill.py)
 - [`examples/semantic_rerank.py`](examples/semantic_rerank.py)
 - [`examples/save_and_load.py`](examples/save_and_load.py)
 - [`examples/provider_answer.py`](examples/provider_answer.py)
